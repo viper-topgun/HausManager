@@ -70,6 +70,7 @@ async def get_payment_status(db: AsyncIOMotorDatabase, year: int) -> list[dict[s
         cursor = db.transactions.find({
             "owner_unit": unit,
             "transaction_type": "hausgeld",
+            "is_fehlbuchung": {"$ne": True},
             "booking_date": {
                 "$gte": date(year - 1, 12, 1).isoformat(),
                 "$lte": date(year + 1, 2, 28).isoformat(),
@@ -175,6 +176,32 @@ async def get_payment_status(db: AsyncIOMotorDatabase, year: int) -> list[dict[s
                 "type": "bka" if _is_bka(full_text) else "surplus",
             })
 
+        # ── Cross-year BKA: search beyond normal window for settlements referencing this year ──
+        # Catches e.g. WE-004 Nachzahlung 2024 paid in January 2026.
+        extra_txs = await db.transactions.find({
+            "owner_unit": unit,
+            "is_fehlbuchung": {"$ne": True},
+            "booking_date": {"$gt": date(year + 1, 2, 28).isoformat()},
+        }).to_list(None)
+        existing_keys = {b["date"] + "|" + str(b["amount"]) for b in bka_list}
+        for tx in extra_txs:
+            bd = tx["booking_date"]
+            if isinstance(bd, str):
+                bd = date.fromisoformat(bd)
+            full_text = tx.get("purpose", "") + " " + tx.get("booking_text", "")
+            yr = _year_ref(full_text, bd.year)
+            if yr == year:
+                key = bd.isoformat() + "|" + str(round(tx["amount"], 2))
+                if key not in existing_keys:
+                    bka_list.append({
+                        "date": bd.isoformat(),
+                        "amount": round(tx["amount"], 2),
+                        "purpose": tx.get("purpose", ""),
+                        "year_ref": yr,
+                        "cross_year": True,
+                        "type": "bka" if _is_bka(full_text) else "surplus",
+                    })
+
         # ── Totals ────────────────────────────────────────────────────────────
         total_regular = sum(m["paid"] for m in month_results)
         total_bka = sum(b["amount"] for b in bka_list if b["amount"] > 0)
@@ -207,7 +234,7 @@ async def get_surcharge_payments(db: AsyncIOMotorDatabase) -> list[dict[str, Any
     Uses the same BKA keyword set as the payment-status analysis.
     """
     results = []
-    async for tx in db.transactions.find({"amount": {"$ne": 0}}):
+    async for tx in db.transactions.find({"amount": {"$ne": 0}, "is_fehlbuchung": {"$ne": True}}):
         purpose = tx.get("purpose", "") + " " + tx.get("booking_text", "")
         if _is_bka(purpose):
             results.append({
@@ -233,6 +260,7 @@ async def get_expense_summary(db: AsyncIOMotorDatabase, year: int) -> list[dict[
             "$match": {
                 "amount": {"$lt": 0},
                 "account_number": "6023543",  # only operating account
+                "is_fehlbuchung": {"$ne": True},
                 "booking_date": {
                     "$gte": date(year, 1, 1).isoformat(),
                     "$lte": date(year, 12, 31).isoformat(),
@@ -362,6 +390,7 @@ async def get_income_summary(db: AsyncIOMotorDatabase, year: int) -> dict[str, A
     cursor = db.transactions.find({
         "amount": {"$gt": 0},
         "account_number": "6023543",
+        "is_fehlbuchung": {"$ne": True},
         "booking_date": {
             "$gte": date(year, 1, 1).isoformat(),
             "$lte": date(year, 12, 31).isoformat(),

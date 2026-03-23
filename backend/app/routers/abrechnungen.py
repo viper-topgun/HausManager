@@ -170,10 +170,12 @@ class AbrechnungUpdate(BaseModel):
 @router.get("/{year}")
 async def get_abrechnung(year: int):
     if year == 2024:
+        from datetime import date as _date
         d = DATA_2024
+        db = get_db()
         owners = []
         for uid in UNIT_ORDER:
-            owners.append(_build_owner(
+            owner_data = _build_owner(
                 uid,
                 d["kosten"],
                 d["vorauszahlungen"][uid],
@@ -181,7 +183,60 @@ async def get_abrechnung(year: int):
                 d["owner_bka1"][uid],
                 editable=False,
                 gesamt_override=d["owner_gesamt"][uid],
-            ))
+            )
+            # Look up actual Nachzahlung payment in the transaction DB
+            nachzahlung_val = owner_data.get("nachzahlung")
+            if nachzahlung_val is not None and nachzahlung_val >= 0.50:
+                tolerance = max(abs(nachzahlung_val) * 0.03, 2.0)
+                txs = await db.transactions.find(
+                    {
+                        "owner_unit": uid,
+                        "amount": {"$gte": nachzahlung_val - tolerance, "$lte": nachzahlung_val + tolerance},
+                        "is_fehlbuchung": {"$ne": True},
+                        "booking_date": {"$gte": "2024-07-01"},
+                    }
+                ).sort("booking_date", 1).limit(1).to_list(1)
+                if txs:
+                    tx = txs[0]
+                    bd = tx["booking_date"]
+                    if isinstance(bd, str):
+                        bd = _date.fromisoformat(bd)
+                    cross_year = bd.year != 2024
+                    owner_data["nachzahlung_status"] = {
+                        "status": "paid_late" if cross_year else "paid",
+                        "date": bd.isoformat(),
+                        "cross_year": cross_year,
+                    }
+                else:
+                    owner_data["nachzahlung_status"] = {"status": "pending"}
+            elif nachzahlung_val is not None and nachzahlung_val <= -0.50:
+                # Rückzahlung – look for outgoing payment to this owner
+                tolerance = max(abs(nachzahlung_val) * 0.03, 2.0)
+                last_name = OWNERS_META[uid]["name"].split()[-1]
+                rtxs = await db.transactions.find(
+                    {
+                        "amount": {"$gte": nachzahlung_val - tolerance, "$lte": nachzahlung_val + tolerance},
+                        "is_fehlbuchung": {"$ne": True},
+                        "booking_date": {"$gte": "2024-07-01"},
+                        "counterparty_name": {"$regex": last_name, "$options": "i"},
+                    }
+                ).sort("booking_date", 1).limit(1).to_list(1)
+                if rtxs:
+                    tx = rtxs[0]
+                    bd = tx["booking_date"]
+                    if isinstance(bd, str):
+                        bd = _date.fromisoformat(bd)
+                    cross_year = bd.year != 2024
+                    owner_data["nachzahlung_status"] = {
+                        "status": "refunded_late" if cross_year else "refunded",
+                        "date": bd.isoformat(),
+                        "cross_year": cross_year,
+                    }
+                else:
+                    owner_data["nachzahlung_status"] = {"status": "refund_pending"}
+            else:
+                owner_data["nachzahlung_status"] = None
+            owners.append(owner_data)
         return {
             "year": 2024,
             "editable": False,

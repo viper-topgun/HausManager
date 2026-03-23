@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
+  import { formatDate } from '$lib/format.js';
 
   let year = 2025;
   let data = null;
@@ -248,7 +249,18 @@
           </div>
           <div class="text-right">
             {#if isComplete}
-              <span class="text-xs font-medium text-green-700 bg-green-100 rounded-full px-3 py-1">✓ vollständig</span>
+              {@const nzs = owner.nachzahlung_status}
+              {#if nzs?.status === 'paid_late'}
+                <span class="text-xs font-medium text-orange-700 bg-orange-100 border border-orange-200 rounded-full px-3 py-1">⚠ Nachzahlung verspätet</span>
+              {:else if nzs?.status === 'pending' && (computeNachzahlung(owner) || 0) > 0}
+                <span class="text-xs font-medium text-red-700 bg-red-100 rounded-full px-3 py-1">✗ Nachzahlung ausstehend</span>
+              {:else if nzs?.status === 'refund_pending'}
+                <span class="text-xs font-medium text-red-700 bg-red-100 rounded-full px-3 py-1">✗ Rückzahlung ausstehend</span>
+              {:else if nzs?.status === 'refunded_late'}
+                <span class="text-xs font-medium text-orange-700 bg-orange-100 border border-orange-200 rounded-full px-3 py-1">⚠ Rückzahlung verspätet</span>
+              {:else}
+                <span class="text-xs font-medium text-green-700 bg-green-100 rounded-full px-3 py-1">✓ vollständig</span>
+              {/if}
             {:else if year === 2025}
               <span class="text-xs font-medium text-amber-700 bg-amber-100 rounded-full px-3 py-1">⏳ BKA-1 fehlt</span>
             {/if}
@@ -346,6 +358,25 @@
                   {/if}
                 </td>
               </tr>
+              {#if owner.nachzahlung_status && nachzahlung !== null && nachzahlung !== 0}
+                <tr>
+                  <td colspan="2" class="pt-2 text-right">
+                    {#if owner.nachzahlung_status.status === 'paid'}
+                      <span class="text-xs bg-green-100 text-green-700 rounded-full px-2 py-0.5">✓ Eingegangen {formatDate(owner.nachzahlung_status.date)}</span>
+                    {:else if owner.nachzahlung_status.status === 'paid_late'}
+                      <span class="text-xs bg-orange-100 text-orange-700 border border-orange-200 rounded-full px-2 py-0.5">⚠ Jahresübergreifend &ndash; eingegangen {formatDate(owner.nachzahlung_status.date)}</span>
+                    {:else if owner.nachzahlung_status.status === 'pending'}
+                      <span class="text-xs bg-red-100 text-red-600 rounded-full px-2 py-0.5">✗ Ausstehend</span>
+                    {:else if owner.nachzahlung_status.status === 'refunded'}
+                      <span class="text-xs bg-green-100 text-green-700 rounded-full px-2 py-0.5">✓ Überwiesen {formatDate(owner.nachzahlung_status.date)}</span>
+                    {:else if owner.nachzahlung_status.status === 'refunded_late'}
+                      <span class="text-xs bg-orange-100 text-orange-700 border border-orange-200 rounded-full px-2 py-0.5">⚠ Jahresübergreifend &ndash; überwiesen {formatDate(owner.nachzahlung_status.date)}</span>
+                    {:else if owner.nachzahlung_status.status === 'refund_pending'}
+                      <span class="text-xs bg-red-100 text-red-600 rounded-full px-2 py-0.5">✗ Noch nicht überwiesen</span>
+                    {/if}
+                  </td>
+                </tr>
+              {/if}
             </table>
           </div>
         </div>

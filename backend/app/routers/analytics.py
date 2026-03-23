@@ -172,12 +172,14 @@ async def dashboard(year: int = Query(default=2025)):
     total_income = sum(
         t["amount"] for t in await db.transactions.find(
             {"amount": {"$gt": 0}, "transaction_type": "hausgeld",
+             "is_fehlbuchung": {"$ne": True},
              "booking_date": {"$gte": f"{year}-01-01", "$lte": f"{year}-12-31"}}
         ).to_list(None)
     )
     total_expenses = sum(
         t["amount"] for t in await db.transactions.find(
             {"amount": {"$lt": 0}, "account_number": "6023543",
+             "is_fehlbuchung": {"$ne": True},
              "booking_date": {"$gte": f"{year}-01-01", "$lte": f"{year}-12-31"}}
         ).to_list(None)
     )

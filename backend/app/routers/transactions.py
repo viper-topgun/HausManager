@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 from bson import ObjectId
+from pydantic import BaseModel
 from typing import Optional
 from ..database import get_db
 
@@ -75,3 +76,28 @@ async def delete_transaction(tx_id: str):
     result = await db.transactions.delete_one({"_id": ObjectId(tx_id)})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Transaction not found")
+
+
+class FehlbuchungUpdate(BaseModel):
+    is_fehlbuchung: bool
+    fehlbuchung_note: Optional[str] = None
+
+
+@router.patch("/{tx_id}/fehlbuchung")
+async def set_fehlbuchung(tx_id: str, data: FehlbuchungUpdate):
+    """Mark or unmark a transaction as an erroneous booking (Fehlbuchung).
+    Fehlbuchungen are excluded from all Abrechnungen and analytics.
+    """
+    db = get_db()
+    update: dict = {"is_fehlbuchung": data.is_fehlbuchung}
+    if data.fehlbuchung_note is not None:
+        update["fehlbuchung_note"] = data.fehlbuchung_note
+    if not data.is_fehlbuchung:
+        update["fehlbuchung_note"] = None
+    result = await db.transactions.update_one(
+        {"_id": ObjectId(tx_id)}, {"$set": update}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    doc = await db.transactions.find_one({"_id": ObjectId(tx_id)})
+    return _fix_id(doc)

@@ -32,6 +32,7 @@ export const api = {
     const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null));
     return request(`/transactions/?${q}`);
   },
+  markFehlbuchung: (id, data) => request(`/transactions/${id}/fehlbuchung`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   // --- Analytics ---
   getDashboard: (year) => request(`/analytics/dashboard?year=${year}`),
