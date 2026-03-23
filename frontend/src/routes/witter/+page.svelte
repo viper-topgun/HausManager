@@ -9,6 +9,8 @@
   let data = null;
   let saving = false;
   let saved = false;
+  let prefilling = false;
+  let prefillResult = null; // summary of what was auto-filled
   let error = null;
   let activeTab = 'nutzer'; // 'nutzer' | 'nebenkosten' | 'heizkosten'
 
@@ -32,7 +34,69 @@
   async function changeYear(y) {
     year = y;
     data = null;
+    prefillResult = null;
     await load();
+  }
+
+  // ─── Prefill from transactions ───────────────────────────────────────────────
+  async function prefill() {
+    prefilling = true; prefillResult = null; error = null;
+    try {
+      const pf = await api.prefillWitter(year);
+      let filled = 0;
+
+      // Merge Nebenkosten
+      pf.nebenkosten.forEach((pfRow) => {
+        const row = data.nebenkosten.find(r => r.kategorie === pfRow.kategorie);
+        if (row && pfRow._matched) {
+          if (pfRow.betrag_brutto != null) { row.betrag_brutto = pfRow.betrag_brutto; filled++; }
+          if (pfRow.lieferant)    row.lieferant = pfRow.lieferant;
+          if (pfRow.rechnungsdatum) row.rechnungsdatum = pfRow.rechnungsdatum;
+          if (pfRow.nr)            row.nr = pfRow.nr;
+        }
+      });
+
+      // Merge Wasserkosten
+      pf.wasserkosten.forEach((pfRow) => {
+        const row = data.wasserkosten.find(r => r.kategorie === pfRow.kategorie);
+        if (row && pfRow._matched) {
+          if (pfRow.betrag_brutto != null) { row.betrag_brutto = pfRow.betrag_brutto; filled++; }
+          if (pfRow.lieferant)    row.lieferant = pfRow.lieferant;
+          if (pfRow.rechnungsdatum) row.rechnungsdatum = pfRow.rechnungsdatum;
+        }
+      });
+
+      // Merge Heiznebenkosten
+      pf.heiznebenkosten.forEach((pfRow) => {
+        const row = data.heiznebenkosten.find(r => r.kategorie === pfRow.kategorie);
+        if (row && pfRow._matched) {
+          if (pfRow.betrag_brutto != null) { row.betrag_brutto = pfRow.betrag_brutto; filled++; }
+          if (pfRow.datum) row.datum = pfRow.datum;
+        }
+      });
+
+      // Merge Vorauszahlungen per Wohnungsnutzer
+      const vz = pf.wohnungsnutzer_vorauszahlungen || {};
+      data.wohnungsnutzer.forEach((row) => {
+        if (vz[row.whg_nr] != null) {
+          row.vorauszahlungen = vz[row.whg_nr];
+          filled++;
+        }
+      });
+
+      // Force Svelte reactivity
+      data = { ...data };
+
+      const matchedRows = [...pf.nebenkosten, ...pf.wasserkosten, ...pf.heiznebenkosten].filter(r => r._matched);
+      prefillResult = {
+        filled,
+        details: matchedRows.map(r => `${r.kategorie}: ${r.betrag_brutto?.toLocaleString('de-DE', {minimumFractionDigits: 2}) ?? '—'} € (${r._count} Buchung${r._count !== 1 ? 'en' : ''})`),
+      };
+    } catch (e) {
+      error = e.message;
+    } finally {
+      prefilling = false;
+    }
   }
 
   // ─── Save ───────────────────────────────────────────────────────────────────
@@ -113,6 +177,14 @@
         {/each}
       </div>
       <button
+        on:click={prefill}
+        disabled={prefilling || !data}
+        class="px-4 py-2 text-sm font-medium rounded-lg border border-primary-300
+          bg-primary-50 hover:bg-primary-100 text-primary-700 transition-colors disabled:opacity-50"
+      >
+        {#if prefilling}⏳ Erkenne Buchungen…{:else}⚡ Aus Buchungen vorbefüllen{/if}
+      </button>
+      <button
         on:click={save}
         disabled={saving || !data}
         class="px-4 py-2 text-sm font-medium rounded-lg transition-colors
@@ -127,6 +199,23 @@
     <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 text-red-700 text-sm">{error}</div>
   {/if}
 
+  {#if prefillResult}
+    <div class="bg-green-50 border border-green-200 rounded-lg px-4 py-3 mb-4 text-sm text-green-800">
+      <div class="flex items-center justify-between">
+        <span class="font-semibold">⚡ {prefillResult.filled} Felder aus Buchungen vorbefüllt</span>
+        <button on:click={() => prefillResult = null} class="text-green-500 hover:text-green-700 text-lg leading-none">×</button>
+      </div>
+      {#if prefillResult.details.length > 0}
+        <ul class="mt-2 space-y-0.5">
+          {#each prefillResult.details as d}
+            <li class="text-xs text-green-700">✓ {d}</li>
+          {/each}
+        </ul>
+      {/if}
+      <p class="text-xs text-green-600 mt-2">Fehlende Felder (z.B. Grundsteuer, Müllentsorgung) bitte manuell eintragen. Anschließend speichern.</p>
+    </div>
+  {/if}
+
   {#if !data}
     <div class="text-center py-16 text-gray-400">Lade…</div>
   {:else}
@@ -136,8 +225,8 @@
     <span class="text-lg leading-none mt-0.5">ℹ</span>
     <div>
       Die <span class="font-semibold">grauen Werte</span> sind die Referenzwerte aus dem
-      <span class="font-semibold">gescannten 2024er Formular</span>. Trage die aktuellen Werte für {year} in die
-      weißen Eingabefelder ein. Die Spaltenbezeichnungen entsprechen exakt den Spalten im Witter-Formular.
+      <span class="font-semibold">gescannten 2024er Formular</span>. Klicke <span class="font-semibold">„Aus Buchungen vorbefüllen"</span> um Beträge
+      automatisch aus den gespeicherten Buchungen des Jahres {year} zu übernehmen. Dann fehlende Felder manuell ergänzen.
     </div>
   </div>
 

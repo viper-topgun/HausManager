@@ -87,4 +87,5 @@ export const api = {
   getWitterRef2024: () => request('/witter/ref/2024'),
   getWitter: (year) => request(`/witter/${year}`),
   saveWitter: (year, data) => request(`/witter/${year}`, { method: 'PUT', body: JSON.stringify(data) }),
+  prefillWitter: (year) => request(`/witter/${year}/prefill`),
 };
