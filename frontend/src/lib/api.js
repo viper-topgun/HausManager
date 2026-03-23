@@ -82,4 +82,9 @@ export const api = {
   createUser: (data) => request('/auth/users', { method: 'POST', body: JSON.stringify(data) }),
   updateUser: (username, data) => request(`/auth/users/${username}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteUser: (username) => request(`/auth/users/${username}`, { method: 'DELETE' }),
+
+  // --- Witter Berechnungsgrundlage ---
+  getWitterRef2024: () => request('/witter/ref/2024'),
+  getWitter: (year) => request(`/witter/${year}`),
+  saveWitter: (year, data) => request(`/witter/${year}`, { method: 'PUT', body: JSON.stringify(data) }),
 };

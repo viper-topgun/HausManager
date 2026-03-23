@@ -15,6 +15,7 @@
     { href: '/payments', label: 'Hausgeld', icon: '✅' },
     { href: '/expenses', label: 'Ausgaben', icon: '📊' },
     { href: '/abrechnungen', label: 'Abrechnung', icon: '📄' },
+    { href: '/witter', label: 'Witter Formular', icon: '🔥' },
     { href: '/import', label: 'Import', icon: '📥' },
   ];
 

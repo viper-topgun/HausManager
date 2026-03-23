@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routers import owners, accounts, transactions, analytics, import_router, abrechnungen
+from .routers import owners, accounts, transactions, analytics, import_router, abrechnungen, witter
 from .routers.auth import router as auth_router, seed_admin
 from .database import get_client
 
@@ -23,6 +23,7 @@ app.include_router(transactions.router)
 app.include_router(analytics.router)
 app.include_router(import_router.router)
 app.include_router(abrechnungen.router)
+app.include_router(witter.router)
 app.include_router(auth_router)
 
 
