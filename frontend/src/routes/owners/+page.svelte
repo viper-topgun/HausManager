@@ -17,6 +17,10 @@
     email: '',
     phone: '',
     monthly_hausgeld: 0,
+    street: '',
+    zip: '',
+    city: '',
+    mea: null,
     notes: '',
   });
   let form = emptyForm();
@@ -102,16 +106,43 @@
               <dt>Monatliches Hausgeld</dt>
               <dd class="font-semibold text-gray-900">{formatEur(owner.monthly_hausgeld)}</dd>
             </div>
+            {#if owner.mea}
+              <div class="flex justify-between">
+                <dt>MEA (Eigentumsanteil)</dt>
+                <dd class="font-semibold text-gray-900">{owner.mea}/1000</dd>
+              </div>
+            {/if}
+            {#if owner.street || owner.city}
+              <div class="flex justify-between">
+                <dt>Wohnort</dt>
+                <dd class="text-right">
+                  {#if owner.street}<span class="block">{owner.street}</span>{/if}
+                  {#if owner.zip || owner.city}<span class="block">{[owner.zip, owner.city].filter(Boolean).join(' ')}</span>{/if}
+                </dd>
+              </div>
+            {/if}
             {#if owner.iban}
               <div class="flex justify-between">
                 <dt>IBAN</dt>
                 <dd class="font-mono text-xs">{owner.iban}</dd>
               </div>
             {/if}
+            {#if owner.bic}
+              <div class="flex justify-between">
+                <dt>BIC</dt>
+                <dd class="font-mono text-xs">{owner.bic}</dd>
+              </div>
+            {/if}
             {#if owner.email}
               <div class="flex justify-between">
                 <dt>E-Mail</dt>
                 <dd>{owner.email}</dd>
+              </div>
+            {/if}
+            {#if owner.phone}
+              <div class="flex justify-between">
+                <dt>Telefon</dt>
+                <dd>{owner.phone}</dd>
               </div>
             {/if}
             {#if owner.notes}
@@ -127,7 +158,7 @@
 <!-- Modal Form -->
 {#if showForm}
   <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-    <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-xl p-6 max-h-[90vh] overflow-y-auto">
       <h3 class="text-lg font-bold mb-4">{editing ? 'Eigentümer bearbeiten' : 'Neuer Eigentümer'}</h3>
       <div class="space-y-3">
         <div class="grid grid-cols-2 gap-3">
@@ -140,22 +171,61 @@
             <input type="number" bind:value={form.monthly_hausgeld} class="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
           </div>
         </div>
-        <div>
-          <label class="text-sm font-medium text-gray-700">Name</label>
-          <input bind:value={form.name} class="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
-        </div>
-        <div>
-          <label class="text-sm font-medium text-gray-700">IBAN</label>
-          <input bind:value={form.iban} class="mt-1 w-full border rounded-lg px-3 py-2 text-sm font-mono" />
-        </div>
         <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-sm font-medium text-gray-700">E-Mail</label>
-            <input type="email" bind:value={form.email} class="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+          <div class="col-span-2">
+            <label class="text-sm font-medium text-gray-700">Name</label>
+            <input bind:value={form.name} class="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
           </div>
+        </div>
+        <!-- Wohnort -->
+        <div class="border-t pt-3">
+          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Wohnort (private Anschrift)</p>
           <div>
-            <label class="text-sm font-medium text-gray-700">Telefon</label>
-            <input bind:value={form.phone} class="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+            <label class="text-sm font-medium text-gray-700">Straße + Hausnummer</label>
+            <input bind:value={form.street} class="mt-1 w-full border rounded-lg px-3 py-2 text-sm" placeholder="Musterstraße 1" />
+          </div>
+          <div class="grid grid-cols-3 gap-3 mt-2">
+            <div>
+              <label class="text-sm font-medium text-gray-700">PLZ</label>
+              <input bind:value={form.zip} class="mt-1 w-full border rounded-lg px-3 py-2 text-sm" placeholder="86591" />
+            </div>
+            <div class="col-span-2">
+              <label class="text-sm font-medium text-gray-700">Ort</label>
+              <input bind:value={form.city} class="mt-1 w-full border rounded-lg px-3 py-2 text-sm" placeholder="Stadt" />
+            </div>
+          </div>
+        </div>
+        <!-- Eigentumsanteil -->
+        <div>
+          <label class="text-sm font-medium text-gray-700">MEA – Miteigentumsanteil
+            <span class="text-xs text-gray-400 font-normal ml-1">(von 1000, z.B. 256)</span>
+          </label>
+          <input type="number" bind:value={form.mea} class="mt-1 w-full border rounded-lg px-3 py-2 text-sm" placeholder="256" />
+        </div>
+        <!-- Bankverbindung -->
+        <div class="border-t pt-3">
+          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Bankverbindung</p>
+          <div>
+            <label class="text-sm font-medium text-gray-700">IBAN</label>
+            <input bind:value={form.iban} class="mt-1 w-full border rounded-lg px-3 py-2 text-sm font-mono" />
+          </div>
+          <div class="mt-2">
+            <label class="text-sm font-medium text-gray-700">BIC</label>
+            <input bind:value={form.bic} class="mt-1 w-full border rounded-lg px-3 py-2 text-sm font-mono" />
+          </div>
+        </div>
+        <!-- Kontakt -->
+        <div class="border-t pt-3">
+          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Kontakt</p>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-sm font-medium text-gray-700">E-Mail</label>
+              <input type="email" bind:value={form.email} class="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label class="text-sm font-medium text-gray-700">Telefon</label>
+              <input bind:value={form.phone} class="mt-1 w-full border rounded-lg px-3 py-2 text-sm" />
+            </div>
           </div>
         </div>
         <div>

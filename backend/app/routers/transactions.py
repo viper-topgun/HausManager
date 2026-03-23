@@ -18,6 +18,7 @@ async def list_transactions(
     owner_unit: Optional[str] = None,
     year: Optional[int] = None,
     month: Optional[int] = None,
+    search: Optional[str] = None,
     limit: int = Query(default=200, le=1000),
     skip: int = 0,
 ):
@@ -29,6 +30,14 @@ async def list_transactions(
         query["transaction_type"] = transaction_type
     if owner_unit:
         query["owner_unit"] = owner_unit
+    if search:
+        import re
+        pattern = re.compile(re.escape(search), re.IGNORECASE)
+        query["$or"] = [
+            {"counterparty_name": {"$regex": pattern}},
+            {"purpose": {"$regex": pattern}},
+            {"booking_text": {"$regex": pattern}},
+        ]
     if year:
         from datetime import date
         date_from = date(year, month or 1, 1).isoformat()

@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routers import owners, accounts, transactions, analytics, import_router, abrechnungen
+from .routers.auth import router as auth_router, seed_admin
 from .database import get_client
 
 app = FastAPI(
@@ -22,6 +23,7 @@ app.include_router(transactions.router)
 app.include_router(analytics.router)
 app.include_router(import_router.router)
 app.include_router(abrechnungen.router)
+app.include_router(auth_router)
 
 
 @app.on_event("startup")
@@ -34,6 +36,8 @@ async def startup():
     await db.transactions.create_index([("owner_unit", 1), ("booking_date", -1)])
     await db.owners.create_index("unit_id", unique=True)
     await db.accounts.create_index("account_number", unique=True)
+    await db.users.create_index("username", unique=True)
+    await seed_admin()
 
 
 @app.get("/health")

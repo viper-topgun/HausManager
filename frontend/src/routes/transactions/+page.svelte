@@ -14,6 +14,7 @@
     owner_unit: '',
     year: new Date().getFullYear(),
     month: '',
+    search: '',
   };
 
   const txTypes = ['hausgeld', 'ausgabe', 'rücklage', 'bankgebühr', 'abschluss', 'sonstiges'];
@@ -79,6 +80,31 @@
         </select>
       </div>
       <button class="btn-primary text-sm" on:click={load}>Filtern</button>
+      {#if filters.search || filters.transaction_type || filters.owner_unit || filters.account_number}
+        <button
+          class="text-xs text-gray-400 hover:text-gray-700 underline"
+          on:click={() => { filters = { account_number: '', transaction_type: '', owner_unit: '', year: new Date().getFullYear(), month: '', search: '' }; load(); }}
+        >Filter zurücksetzen</button>
+      {/if}
+    </div>
+    <!-- Freitext-Suche -->
+    <div class="mt-3">
+      <label class="text-xs text-gray-600 block mb-1">Freitext-Suche</label>
+      <div class="flex gap-2">
+        <input
+          type="text"
+          bind:value={filters.search}
+          on:keydown={(e) => e.key === 'Enter' && load()}
+          placeholder="Name, Verwendungszweck …"
+          class="border rounded-lg px-3 py-1.5 text-sm w-72"
+        />
+        {#if filters.search}
+          <button
+            class="text-xs text-gray-400 hover:text-gray-700 px-2"
+            on:click={() => { filters.search = ''; load(); }}
+          >✕</button>
+        {/if}
+      </div>
     </div>
   </div>
 
