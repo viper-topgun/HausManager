@@ -1,0 +1,78 @@
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:4.4.6
+    container_name: hausmanager_mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: hausmanager
+      MONGO_INITDB_ROOT_PASSWORD: hausmanager_secret
+      MONGO_INITDB_DATABASE: hausmanager
+    volumes:
+      - mongo_data:/data/db
+      - ./mongo/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - hausmanager_net
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hausmanager_backend
+    restart: unless-stopped
+    environment:
+      MONGO_URL: mongodb://hausmanager:hausmanager_secret@mongo:27017/hausmanager?authSource=admin
+      MONGO_DB: hausmanager
+      SECRET_KEY: change_me_in_production_use_env_file
+    volumes:
+      - ./Data:/app/data:ro
+      - import_uploads:/app/uploads
+    networks:
+      - hausmanager_net
+    depends_on:
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: hausmanager_frontend
+    restart: unless-stopped
+    networks:
+      - hausmanager_net
+    depends_on:
+      - backend
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: hausmanager_nginx
+    restart: unless-stopped
+    ports:
+      - "8888:80"
+    networks:
+      - hausmanager_net
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  mongo_data:
+  import_uploads:
+
+networks:
+  hausmanager_net:
+    driver: bridge

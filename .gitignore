@@ -1,0 +1,9 @@
+.env
+mongo_data/
+import_uploads/
+node_modules/
+__pycache__/
+*.pyc
+.svelte-kit/
+build/
+dist/
