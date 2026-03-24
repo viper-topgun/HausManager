@@ -278,6 +278,7 @@ async def prefill_witter(year: int):
     # fall back to keyword rules for uncategorised transactions.
     nk_map: dict[str, dict] = {}  # kategorie → {betrag, lieferant, rechnungsdatum, nr, list_name}
     hk_map: dict[str, dict] = {}  # kategorie → {betrag, datum, nr}
+    brennstoff_txs: list[dict] = []  # individual Brennstoffeinkauf transactions
 
     # Untertyp → Witter-Formular Kategoriename mapping (stored subcategory → form label)
     _UNTERTYP_TO_WITTER_NK: dict[str, tuple[str, str]] = {
@@ -333,6 +334,9 @@ async def prefill_witter(year: int):
                 row["_count"] += 1
                 row["_last_date"] = bd
                 row["_last_purpose"] = tx.get("purpose", "")
+                # Track individual Brennstoffeinkauf entries for the Berechnungsgrundlage
+                if list_name == "brennstoffkosten":
+                    brennstoff_txs.append({"datum": bd, "betrag_brutto": amt})
                 matched = True
             elif stored_sub in _UNTERTYP_TO_WITTER_HK:
                 witter_label = _UNTERTYP_TO_WITTER_HK[stored_sub]
@@ -458,5 +462,14 @@ async def prefill_witter(year: int):
 
     # vorausz is already keyed by whg_nr
     result["wohnungsnutzer_vorauszahlungen"] = vorausz
+
+    # Brennstoffkosten: individual Einkäufe from categorised transactions (Berechnungsgrundlage Seite 2)
+    if brennstoff_txs:
+        result["brennstoffkosten"] = {
+            "einkaufe": [{"datum": t["datum"], "menge": None, "betrag_brutto": t["betrag_brutto"]} for t in brennstoff_txs],
+            "_matched": True,
+            "_count": len(brennstoff_txs),
+            "_total": round(sum(t["betrag_brutto"] for t in brennstoff_txs), 2),
+        }
 
     return result

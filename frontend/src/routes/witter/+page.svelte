@@ -84,14 +84,25 @@
         }
       });
 
+      // Merge Brennstoffkosten Einkäufe (Berechnungsgrundlage Seite 2)
+      if (pf.brennstoffkosten?._matched && pf.brennstoffkosten.einkaufe?.length > 0) {
+        data.brennstoffkosten.einkaufe = pf.brennstoffkosten.einkaufe.map(e => ({
+          datum: e.datum,
+          menge: null,
+          betrag_brutto: e.betrag_brutto,
+        }));
+        filled += pf.brennstoffkosten.einkaufe.length;
+      }
+
       // Force Svelte reactivity
       data = { ...data };
 
       const matchedRows = [...pf.nebenkosten, ...pf.wasserkosten, ...pf.heiznebenkosten].filter(r => r._matched);
-      prefillResult = {
-        filled,
-        details: matchedRows.map(r => `${r.kategorie}: ${r.betrag_brutto?.toLocaleString('de-DE', {minimumFractionDigits: 2}) ?? '—'} € (${r._count} Buchung${r._count !== 1 ? 'en' : ''})`),
-      };
+      const details = matchedRows.map(r => `${r.kategorie}: ${r.betrag_brutto?.toLocaleString('de-DE', {minimumFractionDigits: 2}) ?? '—'} € (${r._count} Buchung${r._count !== 1 ? 'en' : ''})`);
+      if (pf.brennstoffkosten?._matched) {
+        details.push(`Brennstoffeinkauf: ${pf.brennstoffkosten._total?.toLocaleString('de-DE', {minimumFractionDigits: 2}) ?? '—'} € (${pf.brennstoffkosten._count} Buchung${pf.brennstoffkosten._count !== 1 ? 'en' : ''})`);
+      }
+      prefillResult = { filled, details };
     } catch (e) {
       error = e.message;
     } finally {
