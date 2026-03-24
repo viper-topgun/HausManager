@@ -87,7 +87,8 @@ def _rule_abwasser(n: str, p: str) -> bool:
 
 
 def _rule_gemeinschaftsstrom(n: str, p: str) -> bool:
-    return "e.on" in n or "eon energie" in n or "e on energie" in n
+    # E.ON is the building's heating system electricity (Betriebsstrom), not common-area lighting
+    return "strom" in p and "gemeinschaft" in p
 
 
 def _rule_muell(n: str, p: str) -> bool:
@@ -142,7 +143,14 @@ def _rule_kaminfeger(n: str, p: str) -> bool:
 
 
 def _rule_betriebsstrom(n: str, p: str) -> bool:
-    return "betriebsstrom" in p or ("strom" in p and "heiz" in p)
+    # E.ON is the heating system electricity supplier for this building
+    return (
+        "betriebsstrom" in p
+        or ("strom" in p and "heiz" in p)
+        or "e.on" in n
+        or "eon energie" in n
+        or "e on energie" in n
+    )
 
 
 def _rule_reinigungskosten(n: str, p: str) -> bool:

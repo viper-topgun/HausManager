@@ -222,7 +222,7 @@ _NEBENKOSTEN_RULES = [
     ("Hausverwaltung",                    "nebenkosten",   lambda n, p: "witter" in n),
     ("Sach- und Haftpflichtversicherung", "nebenkosten",   lambda n, p: "versicherung" in n or "versicherungs" in n),
     ("Grundsteuer",                       "nebenkosten",   lambda n, p: "finanzamt" in n or "grundsteuer" in p),
-    ("Gemeinschaftsstrom",                "nebenkosten",   lambda n, p: "e.on" in n or "eon energie" in n or ("strom" in p and "gemeinschaft" in p)),
+    ("Gemeinschaftsstrom",                "nebenkosten",   lambda n, p: "strom" in p and "gemeinschaft" in p),
     ("Müllentsorgung",                    "nebenkosten",   lambda n, p: "müll" in p or "entsorgung" in p or "abfall" in p),
     ("Frischwasserkosten",                "wasserkosten",  lambda n, p: "weilachgruppe" in n or "wasservers" in n or ("frischwasser" in p)),
     ("Abwassergebühren",                  "wasserkosten",  lambda n, p: "abwasser" in p or "kanalbenütz" in p or "abwassergeb" in p),
@@ -231,7 +231,7 @@ _NEBENKOSTEN_RULES = [
 
 _HEIZNEBENKOSTEN_RULES = [
     ("Kaminfeger/Schornsteinfeger",       lambda n, p: "kaminfeger" in n or "schornstein" in n or "kamin" in p),
-    ("Betriebsstrom (nicht Warmstrom)",   lambda n, p: "betriebsstrom" in p or ("strom" in p and "heiz" in p)),
+    ("Betriebsstrom (nicht Warmstrom)",   lambda n, p: "betriebsstrom" in p or ("strom" in p and "heiz" in p) or "e.on" in n or "eon energie" in n or "e on energie" in n),
     ("Reinigungskosten der Heizungsanlage", lambda n, p: "reinigung" in p and ("heiz" in p or "anlage" in p)),
     ("Wartungskosten (keine Reparaturkosten)", lambda n, p: "wartung" in p or "wartungsvertrag" in p),
     ("Mietgebühren",                      lambda n, p: ("miete" in p or "mietgebühr" in p) and not "wasser" in p),
