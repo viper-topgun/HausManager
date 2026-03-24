@@ -285,7 +285,7 @@ async def prefill_witter(year: int):
         "Müllentsorgung":                 ("Müllentsorgung", "nebenkosten"),
         "Grundsteuer":                    ("Grundsteuer", "nebenkosten"),
         "Sach- und Haftpflichtversicherung": ("Sach- und Haftpflichtversicherung", "nebenkosten"),
-        "Brennstoffeinkauf":              ("Brennstoffeinkauf", "nebenkosten"),
+        "Brennstoffeinkauf":              ("Brennstoffeinkauf", "brennstoffkosten"),
         "Miet- oder Wartungsgebühren":    ("Miet-/Wartungsgebühren für Kaltwasserzähler", "wasserkosten"),
         "Frischwasserkosten":             ("Frischwasserkosten", "wasserkosten"),
         "Abwasserkosten":                 ("Abwassergebühren", "wasserkosten"),

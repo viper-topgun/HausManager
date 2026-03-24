@@ -10,8 +10,8 @@ Taxonomy:
                          →  Müllentsorgung
                          →  Grundsteuer
                          →  Sach- und Haftpflichtversicherung
-                         →  Brennstoffeinkauf
                          →  Miet- oder Wartungsgebühren
+  Brennstoffkosten       →  Brennstoffeinkauf
   Heiznebenkosten        →  Kaminfeger/Schornsteinfeger
                          →  Betriebsstrom
                          →  Reinigungskosten
@@ -36,8 +36,10 @@ EXPENSE_TAXONOMY: dict[str, list[str]] = {
         "Müllentsorgung",
         "Grundsteuer",
         "Sach- und Haftpflichtversicherung",
-        "Brennstoffeinkauf",
         "Miet- oder Wartungsgebühren",
+    ],
+    "Brennstoffkosten": [
+        "Brennstoffeinkauf",
     ],
     "Heiznebenkosten": [
         "Kaminfeger/Schornsteinfeger",
@@ -165,12 +167,12 @@ _RULES: list[tuple[str, str, object]] = [
     ("Wasserkosten",   "Frischwasserkosten",              _rule_frischwasser),
     ("Wasserkosten",   "Abwasserkosten",                  _rule_abwasser),
     # ── Nebenkosten ───────────────────────────────────────────────────────────
-    ("Nebenkosten",    "Gemeinschaftsstrom",               _rule_gemeinschaftsstrom),
-    ("Nebenkosten",    "Müllentsorgung",                   _rule_muell),
-    ("Nebenkosten",    "Grundsteuer",                      _rule_grundsteuer),
-    ("Nebenkosten",    "Sach- und Haftpflichtversicherung", _rule_versicherung),
-    ("Nebenkosten",    "Brennstoffeinkauf",                _rule_brennstoff),
-    ("Nebenkosten",    "Miet- oder Wartungsgebühren",      _rule_miet_wartung_wasser),
+    ("Nebenkosten",       "Gemeinschaftsstrom",               _rule_gemeinschaftsstrom),
+    ("Nebenkosten",       "Müllentsorgung",                   _rule_muell),
+    ("Nebenkosten",       "Grundsteuer",                      _rule_grundsteuer),
+    ("Nebenkosten",       "Sach- und Haftpflichtversicherung", _rule_versicherung),
+    ("Nebenkosten",       "Miet- oder Wartungsgebühren",      _rule_miet_wartung_wasser),
+    ("Brennstoffkosten",  "Brennstoffeinkauf",                _rule_brennstoff),
     # ── Heiznebenkosten ───────────────────────────────────────────────────────
     ("Heiznebenkosten", "Kaminfeger/Schornsteinfeger",     _rule_kaminfeger),
     ("Heiznebenkosten", "Betriebsstrom",                   _rule_betriebsstrom),
