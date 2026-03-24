@@ -168,13 +168,27 @@ def _rule_wartungskosten(n: str, p: str) -> bool:
 
 
 def _rule_heiz_mietgebuehren(n: str, p: str) -> bool:
-    return ("miete" in p or "mietgebühr" in p) and (
-        "heiz" in p or "heizkessel" in p or "brenner" in p
+    # Heat meter rental companies (Brunata, Techem, ista, Minol, KWD, Qundis)
+    heat_meter_company = (
+        "brunata" in n or "techem" in n or "minol" in n
+        or "kwd" in n or "qundis" in n or "ista gmbh" in n
     )
+    keyword_match = (
+        ("miete" in p or "mietgebühr" in p)
+        and ("heiz" in p or "heizkessel" in p or "brenner" in p or "zähler" in p)
+    )
+    return heat_meter_company or keyword_match
 
 
 def _rule_heiz_wartungsgebuehren(n: str, p: str) -> bool:
-    return "wartungsgebühr" in p and ("heiz" in p or "brenner" in p)
+    heat_meter_company = (
+        "brunata" in n or "techem" in n or "minol" in n
+        or "kwd" in n or "qundis" in n or "ista gmbh" in n
+    )
+    return (
+        (heat_meter_company and "wartung" in p)
+        or ("wartungsgebühr" in p and ("heiz" in p or "brenner" in p))
+    )
 
 
 def _rule_witter_verwaltung(n: str, p: str) -> bool:

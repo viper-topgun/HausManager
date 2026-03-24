@@ -11,6 +11,7 @@
   let saved = false;
   let prefilling = false;
   let prefillResult = null; // summary of what was auto-filled
+  let prefilledFields = {}; // key → true for green highlighting of auto-filled cells
   let error = null;
   let activeTab = 'nutzer'; // 'nutzer' | 'nebenkosten' | 'heizkosten'
 
@@ -35,7 +36,19 @@
     year = y;
     data = null;
     prefillResult = null;
+    prefilledFields = {};
     await load();
+  }
+
+  // ─── Prefill helpers ─────────────────────────────────────────────────────────
+  /** CSS class for a table row that may have been auto-filled */
+  function pfRowCls(key) {
+    return 'border-b border-gray-100' + (prefilledFields[key] ? ' bg-emerald-50/50' : '');
+  }
+  /** CSS class for an input that may have been auto-filled (pass extra classes like 'text-right') */
+  function pfInputCls(key, extra = '') {
+    const pf = prefilledFields[key];
+    return `rounded px-2 py-1 text-xs focus:ring-1 focus:ring-primary-400${extra ? ' ' + extra : ''} ${pf ? 'border border-emerald-400 bg-emerald-50' : 'border'}`;
   }
 
   // ─── Prefill from transactions ───────────────────────────────────────────────
@@ -53,6 +66,7 @@
           if (pfRow.lieferant)    row.lieferant = pfRow.lieferant;
           if (pfRow.rechnungsdatum) row.rechnungsdatum = pfRow.rechnungsdatum;
           if (pfRow.nr)            row.nr = pfRow.nr;
+          prefilledFields[`nk:${pfRow.kategorie}`] = true;
         }
       });
 
@@ -63,6 +77,7 @@
           if (pfRow.betrag_brutto != null) { row.betrag_brutto = pfRow.betrag_brutto; filled++; }
           if (pfRow.lieferant)    row.lieferant = pfRow.lieferant;
           if (pfRow.rechnungsdatum) row.rechnungsdatum = pfRow.rechnungsdatum;
+          prefilledFields[`wk:${pfRow.kategorie}`] = true;
         }
       });
 
@@ -72,6 +87,7 @@
         if (row && pfRow._matched) {
           if (pfRow.betrag_brutto != null) { row.betrag_brutto = pfRow.betrag_brutto; filled++; }
           if (pfRow.datum) row.datum = pfRow.datum;
+          prefilledFields[`hk:${pfRow.kategorie}`] = true;
         }
       });
 
@@ -81,6 +97,7 @@
         if (vz[row.whg_nr] != null) {
           row.vorauszahlungen = vz[row.whg_nr];
           filled++;
+          prefilledFields[`vz:${row.whg_nr}`] = true;
         }
       });
 
@@ -92,9 +109,11 @@
           betrag_brutto: e.betrag_brutto,
         }));
         filled += pf.brennstoffkosten.einkaufe.length;
+        prefilledFields['brennstoff'] = true;
       }
 
       // Force Svelte reactivity
+      prefilledFields = prefilledFields;
       data = { ...data };
 
       const matchedRows = [...pf.nebenkosten, ...pf.wasserkosten, ...pf.heiznebenkosten].filter(r => r._matched);
@@ -343,7 +362,7 @@
                   <div class="text-xs text-gray-400 mt-0.5">{fmtRef(refWN(i,'personen'))}</div>
                 </td>
                 <td class="px-3 py-2 text-right">
-                  <input type="number" step="0.01" bind:value={row.vorauszahlungen} placeholder="0,00" class="w-24 border rounded px-1.5 py-1 text-xs text-right focus:ring-1 focus:ring-primary-400" />
+                  <input type="number" step="0.01" bind:value={row.vorauszahlungen} placeholder="0,00" class="w-24 text-right {pfInputCls(`vz:${row.whg_nr}`)}" />
                   <div class="text-xs text-gray-400 mt-0.5">{fmtRef(refWN(i,'vorauszahlungen'))} €</div>
                 </td>
                 <td class="px-3 py-2 pl-4">
@@ -397,9 +416,10 @@
           </thead>
           <tbody>
             {#each data.nebenkosten as row, i}
-              <tr class="border-b border-gray-100">
+              <tr class={pfRowCls(`nk:${row.kategorie}`)}>
                 <td class="px-3 py-2.5">
                   <span class="text-xs font-medium text-gray-800">{row.kategorie}</span>
+                  {#if prefilledFields[`nk:${row.kategorie}`]}<span class="ml-1 text-emerald-500 text-xs" title="Automatisch aus Buchungen">⚡</span>{/if}
                 </td>
                 <td class="px-3 py-2">
                   <input bind:value={row.lieferant} placeholder="Lieferant eingeben" class="w-full border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-primary-400" />
@@ -410,11 +430,11 @@
                   <div class="text-xs text-blue-400 mt-0.5">2024: {fmtRef(refNK(i,'nr'))}</div>
                 </td>
                 <td class="px-3 py-2">
-                  <input type="date" bind:value={row.rechnungsdatum} class="w-32 border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-primary-400" />
+                  <input type="date" bind:value={row.rechnungsdatum} class="w-32 {pfInputCls(`nk:${row.kategorie}`)}" />
                   <div class="text-xs text-blue-400 mt-0.5">2024: {fmtRef(refNK(i,'rechnungsdatum'))}</div>
                 </td>
                 <td class="px-3 py-2 text-right">
-                  <input type="number" step="0.01" bind:value={row.betrag_brutto} placeholder="0,00" class="w-24 border rounded px-2 py-1 text-xs text-right focus:ring-1 focus:ring-primary-400" />
+                  <input type="number" step="0.01" bind:value={row.betrag_brutto} placeholder="0,00" class="w-24 text-right {pfInputCls(`nk:${row.kategorie}`)}" />
                   <div class="text-xs text-blue-400 mt-0.5">{fmtRef(refNK(i,'betrag_brutto'))} €</div>
                 </td>
                 <td class="px-3 py-2 text-right">
@@ -457,9 +477,10 @@
           </thead>
           <tbody>
             {#each data.wasserkosten as row, i}
-              <tr class="border-b border-gray-100">
+              <tr class={pfRowCls(`wk:${row.kategorie}`)}>
                 <td class="px-3 py-2.5">
                   <span class="text-xs font-medium text-gray-800">{row.kategorie}</span>
+                  {#if prefilledFields[`wk:${row.kategorie}`]}<span class="ml-1 text-emerald-500 text-xs" title="Automatisch aus Buchungen">⚡</span>{/if}
                 </td>
                 <td class="px-3 py-2">
                   <input bind:value={row.lieferant} placeholder="Lieferant" class="w-full border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-primary-400" />
@@ -469,10 +490,10 @@
                   <input bind:value={row.nr} placeholder="Nr." class="w-24 border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-primary-400" />
                 </td>
                 <td class="px-3 py-2">
-                  <input type="date" bind:value={row.rechnungsdatum} class="w-32 border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-primary-400" />
+                  <input type="date" bind:value={row.rechnungsdatum} class="w-32 {pfInputCls(`wk:${row.kategorie}`)}" />
                 </td>
                 <td class="px-3 py-2 text-right">
-                  <input type="number" step="0.01" bind:value={row.betrag_brutto} placeholder="0,00" class="w-24 border rounded px-2 py-1 text-xs text-right focus:ring-1 focus:ring-primary-400" />
+                  <input type="number" step="0.01" bind:value={row.betrag_brutto} placeholder="0,00" class="w-24 text-right {pfInputCls(`wk:${row.kategorie}`)}" />
                   <div class="text-xs text-blue-400 mt-0.5">{fmtRef(refWK(i,'betrag_brutto'))} €</div>
                 </td>
                 <td class="px-3 py-2 text-right">
@@ -580,9 +601,9 @@
       <div class="mb-4">
         <p class="text-xs font-semibold text-gray-600 mb-2">Brennstoffeinkäufe im Abrechnungsjahr</p>
         {#each data.brennstoffkosten.einkaufe as einkauf, i}
-          <div class="grid grid-cols-3 gap-3 mb-2 items-start">
+          <div class="grid grid-cols-3 gap-3 mb-2 items-start {prefilledFields['brennstoff'] ? 'bg-emerald-50/30 rounded-lg p-1' : ''}">
             <div>
-              <input type="date" bind:value={einkauf.datum} class="w-full border rounded px-2 py-1.5 text-sm focus:ring-1 focus:ring-primary-500" />
+              <input type="date" bind:value={einkauf.datum} class="w-full border rounded px-2 py-1.5 text-sm focus:ring-1 focus:ring-primary-500 {prefilledFields['brennstoff'] ? 'border-emerald-400 bg-emerald-50' : ''}" />
               {#if i === 0}<p class="text-xs text-blue-400 mt-0.5">2024: {fmtRef(refBKEinkauf(0,'datum'))}</p>{/if}
             </div>
             <div>
@@ -591,7 +612,7 @@
             </div>
             <div class="flex gap-2">
               <div class="flex-1">
-                <input type="number" step="0.01" bind:value={einkauf.betrag_brutto} placeholder="0,00" class="w-full border rounded px-2 py-1.5 text-sm focus:ring-1 focus:ring-primary-500" />
+                <input type="number" step="0.01" bind:value={einkauf.betrag_brutto} placeholder="0,00" class="w-full border rounded px-2 py-1.5 text-sm text-right focus:ring-1 focus:ring-primary-500 {prefilledFields['brennstoff'] ? 'border-emerald-400 bg-emerald-50' : ''}" />
                 {#if i === 0}<p class="text-xs text-blue-400 mt-0.5">2024: {fmtRef(refBKEinkauf(0,'betrag_brutto'))} €</p>{/if}
               </div>
               {#if data.brennstoffkosten.einkaufe.length > 1}
@@ -647,19 +668,20 @@
           </thead>
           <tbody>
             {#each data.heiznebenkosten as row, i}
-              <tr class="border-b border-gray-100">
+              <tr class={pfRowCls(`hk:${row.kategorie}`)}>
                 <td class="px-3 py-2.5">
                   <span class="text-xs font-medium text-gray-800">{row.kategorie}</span>
+                  {#if prefilledFields[`hk:${row.kategorie}`]}<span class="ml-1 text-emerald-500 text-xs" title="Automatisch aus Buchungen">⚡</span>{/if}
                 </td>
                 <td class="px-3 py-2">
-                  <input type="date" bind:value={row.datum} class="w-32 border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-primary-400" />
+                  <input type="date" bind:value={row.datum} class="w-32 {pfInputCls(`hk:${row.kategorie}`)}" />
                   <div class="text-xs text-blue-400 mt-0.5">2024: {fmtRef(refHN(i,'datum'))}</div>
                 </td>
                 <td class="px-3 py-2">
                   <input bind:value={row.nr} placeholder="Nr." class="w-24 border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-primary-400" />
                 </td>
                 <td class="px-3 py-2 text-right">
-                  <input type="number" step="0.01" bind:value={row.betrag_brutto} placeholder="0,00" class="w-24 border rounded px-2 py-1 text-xs text-right focus:ring-1 focus:ring-primary-400" />
+                  <input type="number" step="0.01" bind:value={row.betrag_brutto} placeholder="0,00" class="w-24 text-right {pfInputCls(`hk:${row.kategorie}`)}" />
                   <div class="text-xs text-blue-400 mt-0.5">{fmtRef(refHN(i,'betrag_brutto'))} €</div>
                 </td>
                 <td class="px-3 py-2 text-right">

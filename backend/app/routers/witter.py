@@ -388,10 +388,10 @@ async def prefill_witter(year: int):
                     row["_count"] += 1
                     break
 
-    # For single-invoice categories: populate rechnungsdatum + nr
+    # Always populate rechnungsdatum from last booking date; extract Nr. for single invoices
     for row in nk_map.values():
+        row["rechnungsdatum"] = row["_last_date"]
         if row["_count"] == 1:
-            row["rechnungsdatum"] = row["_last_date"]
             # Extract invoice reference from purpose (first token that looks like a ref)
             purpose = row["_last_purpose"]
             import re as _re
