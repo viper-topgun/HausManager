@@ -287,6 +287,7 @@ async def prefill_witter(year: int):
         "Sach- und Haftpflichtversicherung": ("Sach- und Haftpflichtversicherung", "nebenkosten"),
         "Brennstoffeinkauf":              ("Brennstoffeinkauf", "brennstoffkosten"),
         "Miet- oder Wartungsgebühren":    ("Miet-/Wartungsgebühren für Kaltwasserzähler", "wasserkosten"),
+        "Hausverwalterhonorar":           ("Hausverwaltung", "nebenkosten"),
         "Frischwasserkosten":             ("Frischwasserkosten", "wasserkosten"),
         "Abwasserkosten":                 ("Abwassergebühren", "wasserkosten"),
     }

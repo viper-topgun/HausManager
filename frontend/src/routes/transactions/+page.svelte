@@ -144,10 +144,12 @@
 
   // ── Kategorie badge styling ───────────────────────────────────────────────
   const HAUPTTYP_COLORS = {
-    'Wasserkosten':    'bg-blue-100 text-blue-700',
-    'Nebenkosten':     'bg-amber-100 text-amber-700',
-    'Brennstoffkosten': 'bg-red-100 text-red-700',
-    'Heiznebenkosten': 'bg-orange-100 text-orange-700',
+    'Wasserkosten':         'bg-blue-100 text-blue-700',
+    'Nebenkosten':          'bg-amber-100 text-amber-700',
+    'Brennstoffkosten':     'bg-red-100 text-red-700',
+    'Heiznebenkosten':      'bg-orange-100 text-orange-700',
+    'Instandhaltung Objekt': 'bg-purple-100 text-purple-700',
+    'Abrechnung Witter':    'bg-teal-100 text-teal-700',
   };
   function kategorieClass(cat) {
     return HAUPTTYP_COLORS[cat] || 'bg-gray-100 text-gray-600';

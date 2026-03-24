@@ -12,6 +12,10 @@ Taxonomy:
                          →  Sach- und Haftpflichtversicherung
                          →  Miet- oder Wartungsgebühren
   Brennstoffkosten       →  Brennstoffeinkauf
+  Instandhaltung Objekt  →  Reparatur
+                         →  Handwerkerkosten
+                         →  Sonstige Instandhaltung
+  Abrechnung Witter      →  Hausverwalterhonorar
   Heiznebenkosten        →  Kaminfeger/Schornsteinfeger
                          →  Betriebsstrom
                          →  Reinigungskosten
@@ -40,6 +44,14 @@ EXPENSE_TAXONOMY: dict[str, list[str]] = {
     ],
     "Brennstoffkosten": [
         "Brennstoffeinkauf",
+    ],
+    "Instandhaltung Objekt": [
+        "Reparatur",
+        "Handwerkerkosten",
+        "Sonstige Instandhaltung",
+    ],
+    "Abrechnung Witter": [
+        "Hausverwalterhonorar",
     ],
     "Heiznebenkosten": [
         "Kaminfeger/Schornsteinfeger",
@@ -157,6 +169,44 @@ def _rule_heiz_wartungsgebuehren(n: str, p: str) -> bool:
     return "wartungsgebühr" in p and ("heiz" in p or "brenner" in p)
 
 
+def _rule_witter_verwaltung(n: str, p: str) -> bool:
+    return "witter" in n
+
+
+def _rule_instandhaltung_reparatur(n: str, p: str) -> bool:
+    return (
+        "reparatur" in p
+        or "instandsetz" in p
+        or "sanierung" in p
+        or "reparatur" in n
+    )
+
+
+def _rule_handwerker(n: str, p: str) -> bool:
+    return (
+        "handwerk" in n
+        or "installat" in n
+        or "klempner" in n
+        or "tischler" in n
+        or "maler" in n
+        or "dachdeck" in n
+        or "elektriker" in n
+        or "sanitär" in n
+        or "montage" in p
+        or "einbau" in p
+        or ("austausch" in p and any(k in p for k in ("rohr", "fenster", "tür", "pump")))
+    )
+
+
+def _rule_sonstige_instandhaltung(n: str, p: str) -> bool:
+    return (
+        "instandhalt" in p
+        or "instandhalt" in n
+        or "dach" in p and "reparatur" in p
+        or "fassade" in p
+    )
+
+
 # ---------------------------------------------------------------------------
 # Ordered rules: (haupttyp, untertyp, rule_fn)
 # First matching rule wins.
@@ -180,6 +230,12 @@ _RULES: list[tuple[str, str, object]] = [
     ("Heiznebenkosten", "Wartungskosten",                  _rule_wartungskosten),
     ("Heiznebenkosten", "Mietgebühren",                    _rule_heiz_mietgebuehren),
     ("Heiznebenkosten", "Wartungsgebühren",                _rule_heiz_wartungsgebuehren),
+    # ── Abrechnung Witter ───────────────────────────────────────────────────────────────────────
+    ("Abrechnung Witter",    "Hausverwalterhonorar",         _rule_witter_verwaltung),
+    # ── Instandhaltung Objekt ────────────────────────────────────────────────────────────────
+    ("Instandhaltung Objekt", "Reparatur",                  _rule_instandhaltung_reparatur),
+    ("Instandhaltung Objekt", "Handwerkerkosten",            _rule_handwerker),
+    ("Instandhaltung Objekt", "Sonstige Instandhaltung",     _rule_sonstige_instandhaltung),
 ]
 
 

@@ -161,6 +161,8 @@ def _build_owner(unit_id: str, kosten: dict, vorauszahlung: float,
 class AbrechnungUpdate(BaseModel):
     bka1_ges_betrag: Optional[float] = None
     owner_bka1: Dict[str, Optional[float]] = {}
+    witter_override: Optional[float] = None
+    instandhaltung_override: Optional[float] = None
 
 
 # ---------------------------------------------------------------------------
@@ -251,7 +253,43 @@ async def get_abrechnung(year: int):
         bka1_ges   = doc.get("bka1_ges_betrag") if doc else None
         owner_bka1 = doc.get("owner_bka1", {})  if doc else {}
 
-        kosten = DATA_2025_BASE["kosten"]
+        # ---------------------------------------------------------------------------
+        # Dynamische Kostenberechnung aus kategorisierten Buchungen
+        # ---------------------------------------------------------------------------
+        year_start, year_end = "2025-01-01", "2025-12-31"
+        base_filter = {
+            "account_number": "6023543",
+            "is_fehlbuchung": {"$ne": True},
+            "booking_date": {"$gte": year_start, "$lte": year_end},
+        }
+
+        async def _sum_haupttyp(ht: str) -> float:
+            txs = await db.transactions.find(
+                {**base_filter, "haupttyp": ht}, {"amount": 1}
+            ).to_list(None)
+            return round(abs(sum(t["amount"] for t in txs)), 2)
+
+        witter_aus_buchungen        = await _sum_haupttyp("Abrechnung Witter")
+        instandhaltung_aus_buchungen = await _sum_haupttyp("Instandhaltung Objekt")
+
+        # DB-Überschreibungen haben höchste Priorität, dann Buchungen, dann Fallback
+        witter_override        = doc.get("witter_override")        if doc else None
+        instandhaltung_override = doc.get("instandhaltung_override") if doc else None
+
+        witter_val        = witter_override        if witter_override is not None \
+                            else (witter_aus_buchungen        if witter_aus_buchungen        else DATA_2025_BASE["kosten"]["witter"])
+        instandhaltung_val = instandhaltung_override if instandhaltung_override is not None \
+                            else (instandhaltung_aus_buchungen if instandhaltung_aus_buchungen else DATA_2025_BASE["kosten"]["instandhaltung"])
+
+        kosten = {
+            **DATA_2025_BASE["kosten"],
+            "witter":        witter_val,
+            "instandhaltung": instandhaltung_val,
+        }
+        kosten_quellen = {
+            "witter":        "manuell" if witter_override is not None else ("buchungen" if witter_aus_buchungen else "fallback"),
+            "instandhaltung": "manuell" if instandhaltung_override is not None else ("buchungen" if instandhaltung_aus_buchungen else "fallback"),
+        }
         owners = []
         for uid in UNIT_ORDER:
             owners.append(_build_owner(
@@ -267,6 +305,7 @@ async def get_abrechnung(year: int):
             "editable": True,
             "bka1_ges_betrag": bka1_ges,
             "kosten": kosten,
+            "kosten_quellen": kosten_quellen,
             "owners": owners,
         }
 
@@ -282,6 +321,10 @@ async def update_abrechnung(year: int, body: AbrechnungUpdate):
     update_fields: dict = {"year": year}
     if body.bka1_ges_betrag is not None:
         update_fields["bka1_ges_betrag"] = body.bka1_ges_betrag
+    if body.witter_override is not None:
+        update_fields["witter_override"] = body.witter_override
+    if body.instandhaltung_override is not None:
+        update_fields["instandhaltung_override"] = body.instandhaltung_override
     # Always overwrite owner_bka1 with the submitted values (None-values are dropped)
     cleaned = {k: v for k, v in body.owner_bka1.items() if v is not None}
     if cleaned:

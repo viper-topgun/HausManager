@@ -186,14 +186,19 @@
       </h2>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
         {#each [
-          ['Rücklagen', data.kosten.ruecklagen],
-          ['Hausverwaltung (Witter)', data.kosten.witter],
-          ['Kontogebühren', data.kosten.kontogebuehren],
-          ['Instandhaltung Objekt', data.kosten.instandhaltung],
-        ] as [label, val]}
+          ['Rücklagen', data.kosten.ruecklagen, null],
+          ['Hausverwaltung (Witter)', data.kosten.witter, data.kosten_quellen?.witter],
+          ['Kontogebühren', data.kosten.kontogebuehren, null],
+          ['Instandhaltung Objekt', data.kosten.instandhaltung, data.kosten_quellen?.instandhaltung],
+        ] as [label, val, quelle]}
           <div class="bg-gray-50 rounded-lg p-3">
             <p class="text-xs text-gray-500 leading-tight">{label}</p>
             <p class="text-base font-semibold text-gray-900 mt-1 font-mono">{fmt(val)}</p>
+            {#if quelle === 'buchungen'}
+              <p class="text-xs text-teal-600 mt-0.5">⚡ aus Buchungen</p>
+            {:else if quelle === 'manuell'}
+              <p class="text-xs text-indigo-600 mt-0.5">✎ manuell</p>
+            {/if}
           </div>
         {/each}
       </div>
