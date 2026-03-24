@@ -22,6 +22,10 @@
   function witterPdfUrl(year) {
     return `/api/witter/${year}/export/pdf`;
   }
+  function abrechnungenZipUrl(year) {
+    return `/api/abrechnungen/${year}/export/zip`;
+  }
+
   function transactionsXlsxUrl(year, account) {
     let url = `/api/transactions/export/xlsx?year=${year}`;
     if (account) url += `&account_number=${encodeURIComponent(account)}`;
@@ -76,6 +80,42 @@
         >
           <span class="text-base">📕</span>
           PDF – {selectedYear}
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Eigentümerabrechnungen ────────────────────────────────────────────── -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
+    <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+      <span class="text-lg">🏠</span>
+      <h2 class="text-base font-semibold text-gray-800">Eigentümerabrechnungen</h2>
+    </div>
+    <div class="px-5 py-4">
+      <p class="text-sm text-gray-500 mb-4">Allgemeine Jahresabrechnung für alle Wohnungseinheiten als Word-Dokumente (ZIP-Archiv).</p>
+
+      <!-- Year selector -->
+      <div class="flex items-center gap-2 mb-4">
+        <span class="text-sm text-gray-600 font-medium w-16">Jahr</span>
+        <div class="flex gap-1 bg-gray-100 rounded-lg p-1">
+          {#each YEARS as y}
+            <button
+              on:click={() => selectedYear = y}
+              class="px-3 py-1 text-sm font-medium rounded-md transition-colors
+                {selectedYear === y ? 'bg-white shadow text-primary-700' : 'text-gray-500 hover:text-gray-700'}"
+            >{y}</button>
+          {/each}
+        </div>
+      </div>
+
+      <div class="flex flex-wrap gap-3">
+        <a
+          href={abrechnungenZipUrl(selectedYear)}
+          download="Abrechnungen_{selectedYear}.zip"
+          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors shadow-sm"
+        >
+          <span class="text-base">📦</span>
+          Alle Word-Dokumente (ZIP) – {selectedYear}
         </a>
       </div>
     </div>

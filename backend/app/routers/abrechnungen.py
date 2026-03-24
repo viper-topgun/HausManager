@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from fastapi.responses import Response
 from ..database import get_db
 from typing import Optional, Dict
 from pydantic import BaseModel
@@ -336,3 +337,31 @@ async def update_abrechnung(year: int, body: AbrechnungUpdate):
         upsert=True,
     )
     return await get_abrechnung(year)
+
+
+@router.get("/{year}/export/zip")
+async def export_abrechnungen_zip(year: int):
+    """Generates all owner Abrechnungen for `year` and returns them as a ZIP archive."""
+    import zipfile
+    from io import BytesIO
+    from ..services.abrechnung_export import generate_owner_docx
+
+    data = await get_abrechnung(year)
+    if "error" in data:
+        return Response(status_code=404, content=data["error"])
+
+    zip_buf = BytesIO()
+    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for owner in data["owners"]:
+            docx_buf = generate_owner_docx(owner, year)
+            last_name = owner["name"].split()[-1]
+            unit_safe = owner["unit_id"].replace("-", "")
+            filename = f"Abrechnung_{last_name}_{year}-{unit_safe}.docx"
+            zf.writestr(filename, docx_buf.read())
+
+    zip_buf.seek(0)
+    return Response(
+        content=zip_buf.read(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="Abrechnungen_{year}.zip"'},
+    )
