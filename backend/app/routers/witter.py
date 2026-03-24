@@ -2,7 +2,7 @@
 Witter Heizkosten-Abrechnung Berechnungsgrundlage
 API zum Speichern und Abrufen der jährlichen Eingabedaten für das Witter-Formular.
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 from pydantic import BaseModel
 from typing import Optional, List
 from ..database import get_db
@@ -238,8 +238,36 @@ async def save_witter(year: int, data: WitterData):
 
 
 # ---------------------------------------------------------------------------
-# Prefill from transactions
+# Export endpoints (Word / PDF)
 # ---------------------------------------------------------------------------
+
+@router.get("/{year}/export/docx")
+async def export_witter_docx(year: int):
+    """Exportiert die Witter-Abrechnung als Word-Dokument (.docx)."""
+    from ..services.witter_export import generate_docx
+    doc_data = await get_witter(year)
+    buf = generate_docx(doc_data, year)
+    return Response(
+        content=buf.read(),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="Witter_Abrechnung_{year}.docx"'},
+    )
+
+
+@router.get("/{year}/export/pdf")
+async def export_witter_pdf(year: int):
+    """Exportiert die Witter-Abrechnung als PDF."""
+    from ..services.witter_export import generate_pdf
+    doc_data = await get_witter(year)
+    buf = generate_pdf(doc_data, year)
+    return Response(
+        content=buf.read(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="Witter_Abrechnung_{year}.pdf"'},
+    )
+
+
+
 
 # Mapping rules: list of (kategorie, list_name, matcher_fn)
 # matcher_fn(counterparty_name: str, purpose: str) -> bool

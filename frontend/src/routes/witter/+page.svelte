@@ -222,6 +222,18 @@
       >
         {#if saving}Speichern…{:else if saved}✓ Gespeichert{:else}💾 Speichern{/if}
       </button>
+      <a
+        href="/api/witter/{year}/export/docx"
+        download="Witter_Abrechnung_{year}.docx"
+        class="px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 transition-colors {!data ? 'pointer-events-none opacity-50' : ''}"
+        title="Als Word-Dokument exportieren"
+      >📄 Word</a>
+      <a
+        href="/api/witter/{year}/export/pdf"
+        download="Witter_Abrechnung_{year}.pdf"
+        class="px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 transition-colors {!data ? 'pointer-events-none opacity-50' : ''}"
+        title="Als PDF exportieren"
+      >📕 PDF</a>
     </div>
   </div>
 
