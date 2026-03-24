@@ -11,6 +11,7 @@ Taxonomy:
                          →  Grundsteuer
                          →  Sach- und Haftpflichtversicherung
                          →  Miet- oder Wartungsgebühren
+                         →  Wartungskosten
   Brennstoffkosten       →  Brennstoffeinkauf
   Instandhaltung Objekt  →  Reparatur
                          →  Handwerkerkosten
@@ -41,6 +42,7 @@ EXPENSE_TAXONOMY: dict[str, list[str]] = {
         "Grundsteuer",
         "Sach- und Haftpflichtversicherung",
         "Miet- oder Wartungsgebühren",
+        "Wartungskosten",
     ],
     "Brennstoffkosten": [
         "Brennstoffeinkauf",

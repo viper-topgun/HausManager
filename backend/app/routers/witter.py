@@ -154,10 +154,34 @@ async def get_witter(year: int):
     """
     Gibt die gespeicherten Witter-Eingabedaten für ein Jahr zurück.
     Falls nicht vorhanden, wird ein leeres Template zurückgegeben.
+    Fehlende Kategoriezeilen (z.B. neu hinzugefügte) werden aus dem Template ergänzt.
     """
     db = get_db()
     doc = await db.witter_data.find_one({"year": year}, {"_id": 0})
     if doc:
+        # Merge missing nebenkosten / wasserkosten / heiznebenkosten rows
+        # so newly added template categories appear in existing stored data.
+        _TEMPLATE_NK = ["Hausverwaltung", "Sach- und Haftpflichtversicherung",
+                        "Grundsteuer", "Gemeinschaftsstrom", "Müllentsorgung", "Wartungskosten"]
+        _TEMPLATE_WK = ["Frischwasserkosten", "Abwassergebühren",
+                        "Miet-/Wartungsgebühren für Kaltwasserzähler"]
+        _TEMPLATE_HK = ["Kaminfeger/Schornsteinfeger", "Betriebsstrom (nicht Warmstrom)",
+                        "Reinigungskosten der Heizungsanlage", "Wartungskosten (keine Reparaturkosten)",
+                        "Mietgebühren", "Wartungsgebühren"]
+        def _merge_rows(stored: list, template_keys: list, extra_fields: dict) -> list:
+            existing = {r["kategorie"] for r in stored}
+            for k in template_keys:
+                if k not in existing:
+                    stored.append({"kategorie": k, **extra_fields})
+            return stored
+        _nk_extra = {"lieferant": None, "nr": None, "rechnungsdatum": None,
+                     "betrag_brutto": None, "gesamtbetrag": None,
+                     "anteil_arbeitskosten": None, "whg_nr": None}
+        _hk_extra = {"datum": None, "nr": None, "betrag_brutto": None,
+                     "gesamtbetrag": None, "anteil_arbeitskosten": None}
+        doc["nebenkosten"] = _merge_rows(doc.get("nebenkosten", []), _TEMPLATE_NK, _nk_extra)
+        doc["wasserkosten"] = _merge_rows(doc.get("wasserkosten", []), _TEMPLATE_WK, _nk_extra)
+        doc["heiznebenkosten"] = _merge_rows(doc.get("heiznebenkosten", []), _TEMPLATE_HK, _hk_extra)
         return doc
 
     # Leeres Template aus den Strukturdaten aufbauen
@@ -178,6 +202,7 @@ async def get_witter(year: int):
             NebenkostenRow(kategorie="Grundsteuer"),
             NebenkostenRow(kategorie="Gemeinschaftsstrom"),
             NebenkostenRow(kategorie="Müllentsorgung"),
+            NebenkostenRow(kategorie="Wartungskosten"),
         ],
         wasserkosten=[
             NebenkostenRow(kategorie="Frischwasserkosten"),
@@ -286,6 +311,7 @@ async def prefill_witter(year: int):
         "Müllentsorgung":                 ("Müllentsorgung", "nebenkosten"),
         "Grundsteuer":                    ("Grundsteuer", "nebenkosten"),
         "Sach- und Haftpflichtversicherung": ("Sach- und Haftpflichtversicherung", "nebenkosten"),
+        "Wartungskosten":                 ("Wartungskosten", "nebenkosten"),
         "Brennstoffeinkauf":              ("Brennstoffeinkauf", "brennstoffkosten"),
         "Miet- oder Wartungsgebühren":    ("Miet-/Wartungsgebühren für Kaltwasserzähler", "wasserkosten"),
         "Hausverwalterhonorar":           ("Hausverwaltung", "nebenkosten"),
