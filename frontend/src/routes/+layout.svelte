@@ -17,6 +17,7 @@
     { href: '/abrechnungen', label: 'Abrechnung', icon: '📄' },
     { href: '/witter', label: 'Witter Formular', icon: '🔥' },
     { href: '/import', label: 'Import', icon: '📥' },
+    { href: '/export', label: 'Export', icon: '📤' },
   ];
 
   $: isLoginPage = $page.url.pathname === '/login';

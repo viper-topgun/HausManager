@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from bson import ObjectId
 from pydantic import BaseModel
 from typing import Optional
@@ -77,6 +77,97 @@ async def list_transactions(
 async def get_taxonomy():
     """Return the full Haupttyp → [Untertypen] taxonomy for expense categories."""
     return EXPENSE_TAXONOMY
+
+
+# ---------------------------------------------------------------------------
+# Excel-Export  (must be before /{tx_id} wildcard)
+# ---------------------------------------------------------------------------
+
+@router.get("/export/xlsx")
+async def export_transactions_xlsx(
+    year: Optional[int] = None,
+    account_number: Optional[str] = None,
+):
+    """Exportiert alle Buchungen (optional gefiltert nach Jahr/Konto) als Excel-Datei."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from io import BytesIO
+
+    db = get_db()
+    query: dict = {}
+    if year:
+        from datetime import date
+        query["booking_date"] = {"$gte": date(year, 1, 1).isoformat(), "$lte": date(year, 12, 31).isoformat()}
+    if account_number:
+        query["account_number"] = account_number
+
+    docs = await db.transactions.find(query).sort("booking_date", 1).to_list(None)
+
+    wb = Workbook()
+    ws = wb.active
+    label = f"Buchungen {year or 'Alle'}"
+    ws.title = label[:31]
+
+    PRIMARY = "1A7A5E"
+    headers = [
+        "Datum", "Konto", "Buchungstext", "Gegenseite", "Verwendungszweck",
+        "Betrag", "Währung", "Haupttyp", "Untertyp", "WE", "Fehlbuchung",
+    ]
+    header_font = Font(bold=True, color="FFFFFF", size=10)
+    header_fill = PatternFill("solid", fgColor=PRIMARY)
+    alt_fill    = PatternFill("solid", fgColor="E6F4EF")
+    right_align = Alignment(horizontal="right")
+    center      = Alignment(horizontal="center")
+
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.font      = header_font
+        cell.fill      = header_fill
+        cell.alignment = center
+
+    for r_idx, doc in enumerate(docs, 2):
+        betrag = doc.get("amount")
+        row = [
+            doc.get("booking_date", ""),
+            doc.get("account_number", ""),
+            doc.get("booking_text", ""),
+            doc.get("counterparty_name", ""),
+            doc.get("purpose", ""),
+            betrag,
+            doc.get("currency", "EUR"),
+            doc.get("haupttyp", ""),
+            doc.get("untertyp", ""),
+            doc.get("owner_unit", ""),
+            "Ja" if doc.get("is_fehlbuchung") else "",
+        ]
+        for col, val in enumerate(row, 1):
+            cell = ws.cell(row=r_idx, column=col, value=val)
+            cell.font = Font(size=9)
+            if r_idx % 2 == 0:
+                cell.fill = alt_fill
+            if col == 6 and isinstance(val, (int, float)):
+                cell.number_format = '#,##0.00'
+                cell.alignment = right_align
+
+    col_widths = [12, 10, 20, 28, 40, 12, 8, 18, 22, 8, 10]
+    for i, w in enumerate(col_widths, 1):
+        ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
+    ws.freeze_panes = "A2"
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"Buchungen_{year or 'Alle'}"
+    if account_number:
+        filename += f"_{account_number}"
+    filename += ".xlsx"
+
+    return Response(
+        content=buf.read(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/{tx_id}")
