@@ -9,9 +9,21 @@
   let loading = true;
   let error = null;
 
+  // Taxonomy loaded once from API
+  let taxonomy = {};           // { Haupttyp: [untertyp, …], … }
+  let haupttypen = [];         // sorted keys of taxonomy
+
   // Fehlbuchung modal
   let fehlbuchungModal = null; // { tx, note }
   let fehlbuchungSaving = false;
+
+  // Kategorie-Zuweisung modal
+  let kategorieModal = null;   // { tx, haupttyp, untertyp }
+  let kategorieSaving = false;
+
+  // Retroactive reclassify
+  let reclassifying = false;
+  let reclassifyResult = null;
 
   let filters = {
     account_number: $page.url.searchParams.get('account_number') || '',
@@ -20,6 +32,8 @@
     year: new Date().getFullYear(),
     month: '',
     search: '',
+    haupttyp: '',
+    untertyp: '',
   };
 
   const txTypes = ['hausgeld', 'ausgabe', 'rücklage', 'bankgebühr', 'abschluss', 'sonstiges'];
@@ -37,12 +51,22 @@
     }
   }
 
-  onMount(load);
+  async function loadTaxonomy() {
+    try {
+      taxonomy = await api.getTaxonomy();
+      haupttypen = Object.keys(taxonomy).sort();
+    } catch (_) { /* not critical */ }
+  }
+
+  onMount(async () => {
+    await Promise.all([load(), loadTaxonomy()]);
+  });
 
   function txColor(amount) {
     return amount > 0 ? 'text-green-600' : 'text-red-600';
   }
 
+  // ── Fehlbuchung ────────────────────────────────────────────────────────────
   function openFehlbuchung(tx) {
     if (tx.is_fehlbuchung) {
       if (!confirm(`Fehlbuchungs-Markierung von "${tx.counterparty_name || 'dieser Buchung'}" entfernen?`)) return;
@@ -66,6 +90,66 @@
     } finally {
       fehlbuchungSaving = false;
     }
+  }
+
+  // ── Kategorie-Zuweisung ───────────────────────────────────────────────────
+  function openKategorie(tx) {
+    kategorieModal = {
+      tx,
+      haupttyp: tx.haupttyp || '',
+      untertyp: tx.untertyp || '',
+    };
+  }
+
+  function onHaupttypChange() {
+    // Reset Untertyp when Haupttyp changes
+    if (kategorieModal) kategorieModal.untertyp = '';
+  }
+
+  async function saveKategorie() {
+    kategorieSaving = true;
+    try {
+      await api.setKategorie(kategorieModal.tx._id, {
+        haupttyp: kategorieModal.haupttyp || null,
+        untertyp: kategorieModal.untertyp || null,
+      });
+      kategorieModal = null;
+      await load();
+    } catch (e) {
+      alert('Fehler: ' + e.message);
+    } finally {
+      kategorieSaving = false;
+    }
+  }
+
+  function clearKategorie() {
+    kategorieModal.haupttyp = '';
+    kategorieModal.untertyp = '';
+  }
+
+  // ── Retroactive reclassify ────────────────────────────────────────────────
+  async function doReclassify() {
+    if (!confirm('Alle unkategorisierten Ausgaben automatisch klassifizieren?')) return;
+    reclassifying = true;
+    reclassifyResult = null;
+    try {
+      reclassifyResult = await api.reclassifyExpenses();
+      await load();
+    } catch (e) {
+      alert('Fehler: ' + e.message);
+    } finally {
+      reclassifying = false;
+    }
+  }
+
+  // ── Kategorie badge styling ───────────────────────────────────────────────
+  const HAUPTTYP_COLORS = {
+    'Wasserkosten':    'bg-blue-100 text-blue-700',
+    'Nebenkosten':     'bg-amber-100 text-amber-700',
+    'Heiznebenkosten': 'bg-orange-100 text-orange-700',
+  };
+  function kategorieClass(cat) {
+    return HAUPTTYP_COLORS[cat] || 'bg-gray-100 text-gray-600';
   }
 </script>
 
@@ -93,6 +177,26 @@
         </select>
       </div>
       <div>
+        <label class="text-xs text-gray-600 block mb-1">Haupttyp</label>
+        <select bind:value={filters.haupttyp} on:change={() => { filters.untertyp = ''; }} class="border rounded-lg px-3 py-1.5 text-sm">
+          <option value="">Alle</option>
+          {#each haupttypen as h}
+            <option value={h}>{h}</option>
+          {/each}
+        </select>
+      </div>
+      {#if filters.haupttyp && taxonomy[filters.haupttyp]}
+        <div>
+          <label class="text-xs text-gray-600 block mb-1">Untertyp</label>
+          <select bind:value={filters.untertyp} class="border rounded-lg px-3 py-1.5 text-sm">
+            <option value="">Alle</option>
+            {#each taxonomy[filters.haupttyp] as u}
+              <option value={u}>{u}</option>
+            {/each}
+          </select>
+        </div>
+      {/if}
+      <div>
         <label class="text-xs text-gray-600 block mb-1">Einheit</label>
         <select bind:value={filters.owner_unit} class="border rounded-lg px-3 py-1.5 text-sm">
           <option value="">Alle</option>
@@ -104,37 +208,53 @@
       <div>
         <label class="text-xs text-gray-600 block mb-1">Jahr</label>
         <select bind:value={filters.year} class="border rounded-lg px-3 py-1.5 text-sm">
-          {#each [2025, 2026] as y}
+          {#each [2024, 2025, 2026] as y}
             <option value={y}>{y}</option>
           {/each}
         </select>
       </div>
       <button class="btn-primary text-sm" on:click={load}>Filtern</button>
-      {#if filters.search || filters.transaction_type || filters.owner_unit || filters.account_number}
+      {#if filters.search || filters.transaction_type || filters.owner_unit || filters.account_number || filters.haupttyp || filters.untertyp}
         <button
           class="text-xs text-gray-400 hover:text-gray-700 underline"
-          on:click={() => { filters = { account_number: '', transaction_type: '', owner_unit: '', year: new Date().getFullYear(), month: '', search: '' }; load(); }}
+          on:click={() => { filters = { account_number: '', transaction_type: '', owner_unit: '', year: new Date().getFullYear(), month: '', search: '', haupttyp: '', untertyp: '' }; load(); }}
         >Filter zurücksetzen</button>
       {/if}
     </div>
-    <!-- Freitext-Suche -->
-    <div class="mt-3">
-      <label class="text-xs text-gray-600 block mb-1">Freitext-Suche</label>
-      <div class="flex gap-2">
-        <input
-          type="text"
-          bind:value={filters.search}
-          on:keydown={(e) => e.key === 'Enter' && load()}
-          placeholder="Name, Verwendungszweck …"
-          class="border rounded-lg px-3 py-1.5 text-sm w-72"
-        />
-        {#if filters.search}
-          <button
-            class="text-xs text-gray-400 hover:text-gray-700 px-2"
-            on:click={() => { filters.search = ''; load(); }}
-          >✕</button>
-        {/if}
+    <!-- Freitext-Suche + Reklassifizierung -->
+    <div class="mt-3 flex flex-wrap gap-4 items-end">
+      <div>
+        <label class="text-xs text-gray-600 block mb-1">Freitext-Suche</label>
+        <div class="flex gap-2">
+          <input
+            type="text"
+            bind:value={filters.search}
+            on:keydown={(e) => e.key === 'Enter' && load()}
+            placeholder="Name, Verwendungszweck …"
+            class="border rounded-lg px-3 py-1.5 text-sm w-72"
+          />
+          {#if filters.search}
+            <button
+              class="text-xs text-gray-400 hover:text-gray-700 px-2"
+              on:click={() => { filters.search = ''; load(); }}
+            >✕</button>
+          {/if}
+        </div>
       </div>
+      {#if $currentUser?.role === 'admin'}
+        <div class="flex items-center gap-3 mt-1">
+          <button
+            class="text-xs text-indigo-600 hover:text-indigo-800 underline disabled:opacity-40"
+            on:click={doReclassify}
+            disabled={reclassifying}
+          >
+            {reclassifying ? '⏳ Klassifiziere…' : '⚡ Ausgaben auto-klassifizieren'}
+          </button>
+          {#if reclassifyResult}
+            <span class="text-xs text-green-600">{reclassifyResult.updated} Buchungen aktualisiert</span>
+          {/if}
+        </div>
+      {/if}
     </div>
   </div>
 
@@ -155,6 +275,7 @@
               <th class="text-left px-3 py-2 font-medium">Auftraggeber / Name</th>
               <th class="text-left px-3 py-2 font-medium">Verwendungszweck</th>
               <th class="text-left px-3 py-2 font-medium">Typ</th>
+              <th class="text-left px-3 py-2 font-medium">Kategorie</th>
               <th class="text-left px-3 py-2 font-medium">Einheit</th>
               <th class="text-right px-3 py-2 font-medium">Betrag</th>
               <th class="px-2 py-2 w-8"></th>
@@ -165,16 +286,39 @@
               <tr class="border-t hover:bg-gray-50 {tx.is_fehlbuchung ? 'bg-red-50/40 opacity-60' : ''}">
                 <td class="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">{formatDate(tx.booking_date)}</td>
                 <td class="px-3 py-2 max-w-[180px] truncate {tx.is_fehlbuchung ? 'line-through' : ''}">{tx.counterparty_name || '–'}</td>
-                <td class="px-3 py-2 max-w-[300px] text-gray-600 text-xs">
+                <td class="px-3 py-2 max-w-[280px] text-gray-600 text-xs">
                   <span class="truncate block {tx.is_fehlbuchung ? 'line-through' : ''}">{tx.purpose || tx.booking_text || '–'}</span>
                   {#if tx.fehlbuchung_note}
                     <span class="text-red-500 block mt-0.5 not-italic">⚠ {tx.fehlbuchung_note}</span>
                   {/if}
                 </td>
-                <td class="px-3 py-2">
+                <td class="px-3 py-2 whitespace-nowrap">
                   <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">{tx.transaction_type || '–'}</span>
                   {#if tx.is_fehlbuchung}
                     <span class="ml-1 text-xs text-red-500" title="Fehlbuchung">🚫</span>
+                  {/if}
+                </td>
+                <!-- Kategorie / Untertyp -->
+                <td class="px-3 py-2 min-w-[160px]">
+                  {#if tx.haupttyp}
+                    <button
+                      class="text-left group"
+                      on:click={() => $currentUser?.role === 'admin' && openKategorie(tx)}
+                      title={$currentUser?.role === 'admin' ? 'Kategorie bearbeiten' : tx.haupttyp}
+                    >
+                      <span class="text-xs px-1.5 py-0.5 rounded {kategorieClass(tx.haupttyp)}">{tx.haupttyp}</span>
+                      {#if tx.untertyp}
+                        <span class="block text-xs text-gray-500 mt-0.5 ml-0.5">{tx.untertyp}</span>
+                      {/if}
+                    </button>
+                  {:else if tx.transaction_type === 'ausgabe' && $currentUser?.role === 'admin'}
+                    <button
+                      class="text-xs text-gray-400 hover:text-indigo-600 underline"
+                      on:click={() => openKategorie(tx)}
+                      title="Kategorie zuweisen"
+                    >+ zuweisen</button>
+                  {:else}
+                    <span class="text-xs text-gray-300">–</span>
                   {/if}
                 </td>
                 <td class="px-3 py-2">
@@ -245,6 +389,84 @@
         >
           {fehlbuchungSaving ? 'Speichert…' : '🚫 Als Fehlbuchung markieren'}
         </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Kategorie-Zuweisung Modal -->
+{#if kategorieModal}
+  <div
+    class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+    on:click|self={() => (kategorieModal = null)}
+    role="dialog"
+    aria-modal="true"
+  >
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6">
+      <h2 class="text-base font-bold text-gray-800 mb-1">🏷 Kategorie zuweisen</h2>
+      <p class="text-sm text-gray-500 mb-4">
+        <span class="font-medium">{kategorieModal.tx.counterparty_name || '–'}</span>
+        &middot; {formatEur(kategorieModal.tx.amount)}
+        &middot; {formatDate(kategorieModal.tx.booking_date)}
+      </p>
+      {#if kategorieModal.tx.purpose}
+        <p class="text-xs text-gray-400 mb-4 italic">{kategorieModal.tx.purpose}</p>
+      {/if}
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Haupttyp</label>
+          <select
+            bind:value={kategorieModal.haupttyp}
+            on:change={onHaupttypChange}
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          >
+            <option value="">– kein Haupttyp –</option>
+            {#each haupttypen as ht}
+              <option value={ht}>{ht}</option>
+            {/each}
+          </select>
+        </div>
+
+        {#if kategorieModal.haupttyp && taxonomy[kategorieModal.haupttyp]}
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Untertyp</label>
+            <select
+              bind:value={kategorieModal.untertyp}
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            >
+              <option value="">– kein Untertyp –</option>
+              {#each taxonomy[kategorieModal.haupttyp] as ut}
+                <option value={ut}>{ut}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
+
+        <p class="text-xs text-gray-400">
+          Die Kategorie dient der Validierung in der Gesamtabrechnung. Vorhandene Daten bleiben unverändert.
+        </p>
+      </div>
+
+      <div class="flex justify-between gap-3 mt-5">
+        <button
+          on:click={clearKategorie}
+          class="px-4 py-2 text-sm text-gray-400 hover:text-red-600 font-medium"
+          title="Kategorie entfernen"
+        >✕ Zurücksetzen</button>
+        <div class="flex gap-2">
+          <button
+            on:click={() => (kategorieModal = null)}
+            class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 font-medium"
+          >Abbrechen</button>
+          <button
+            on:click={saveKategorie}
+            disabled={kategorieSaving}
+            class="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold px-5 py-2 rounded-lg transition-colors"
+          >
+            {kategorieSaving ? 'Speichert…' : '🏷 Speichern'}
+          </button>
+        </div>
       </div>
     </div>
   </div>

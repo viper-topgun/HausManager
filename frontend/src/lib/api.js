@@ -33,12 +33,16 @@ export const api = {
     return request(`/transactions/?${q}`);
   },
   markFehlbuchung: (id, data) => request(`/transactions/${id}/fehlbuchung`, { method: 'PATCH', body: JSON.stringify(data) }),
+  setKategorie: (id, data) => request(`/transactions/${id}/kategorie`, { method: 'PATCH', body: JSON.stringify(data) }),
+  reclassifyExpenses: () => request('/transactions/reclassify', { method: 'POST' }),
+  getTaxonomy: () => request('/transactions/taxonomy'),
 
   // --- Analytics ---
   getDashboard: (year) => request(`/analytics/dashboard?year=${year}`),
   getPaymentStatus: (year) => request(`/analytics/payment-status?year=${year}`),
   getSurcharges: () => request('/analytics/surcharges'),
   getExpenses: (year) => request(`/analytics/expenses?year=${year}`),
+  getExpenseCategories: (year) => request(`/analytics/expense-categories?year=${year}`),
   getIncome: (year) => request(`/analytics/income?year=${year}`),
   getAccountBalanceHistory: () => request('/analytics/account-balance-history'),
 

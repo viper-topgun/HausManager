@@ -6,6 +6,7 @@ from ..services.payment_analyzer import (
     get_expense_summary,
     get_income_summary,
 )
+from ..services.expense_classifier import EXPENSE_TAXONOMY
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -32,6 +33,84 @@ async def expenses(year: int = Query(default=2025)):
 async def income(year: int = Query(default=2025)):
     db = get_db()
     return await get_income_summary(db, year)
+
+
+@router.get("/expense-categories")
+async def expense_categories(year: int = Query(default=2025)):
+    """
+    Return expense totals grouped by Haupttyp (category) and Untertyp (subcategory)
+    for validation against the Witter/BKA Gesamtabrechnung.
+
+    Structure:
+    {
+      "year": 2025,
+      "by_haupttyp": {
+        "Nebenkosten": {
+          "total": -3456.95,
+          "subcategories": {
+            "Gemeinschaftsstrom": {"total": -782.80, "count": 11, "counterparties": [...]},
+            ...
+          }
+        },
+        ...
+      },
+      "uncategorised": {"total": -1234.56, "count": 5}
+    }
+    """
+    from datetime import date
+    db = get_db()
+    year_start = f"{year}-01-01"
+    year_end   = f"{year}-12-31"
+
+    txs = await db.transactions.find({
+        "amount": {"$lt": 0},
+        "account_number": "6023543",
+        "is_fehlbuchung": {"$ne": True},
+        "booking_date": {"$gte": year_start, "$lte": year_end},
+    }, {"amount": 1, "haupttyp": 1, "untertyp": 1,
+        "counterparty_name": 1, "purpose": 1, "booking_date": 1}).to_list(None)
+
+    by_haupttyp: dict = {}
+    uncategorised_total = 0.0
+    uncategorised_count = 0
+
+    for tx in txs:
+        haupttyp = tx.get("haupttyp")
+        untertyp = tx.get("untertyp")
+        amt = tx["amount"]
+
+        if not haupttyp or haupttyp not in EXPENSE_TAXONOMY:
+            uncategorised_total += amt
+            uncategorised_count += 1
+            continue
+
+        if haupttyp not in by_haupttyp:
+            by_haupttyp[haupttyp] = {"total": 0.0, "subcategories": {}}
+        ht = by_haupttyp[haupttyp]
+        ht["total"] = round(ht["total"] + amt, 2)
+
+        key = untertyp or "–"
+        if key not in ht["subcategories"]:
+            ht["subcategories"][key] = {"total": 0.0, "count": 0, "counterparties": []}
+        sub = ht["subcategories"][key]
+        sub["total"] = round(sub["total"] + amt, 2)
+        sub["count"] += 1
+        cp = tx.get("counterparty_name") or ""
+        if cp and cp not in sub["counterparties"]:
+            sub["counterparties"].append(cp)
+
+    # Round totals
+    for ht in by_haupttyp.values():
+        ht["total"] = round(ht["total"], 2)
+
+    return {
+        "year": year,
+        "by_haupttyp": by_haupttyp,
+        "uncategorised": {
+            "total": round(uncategorised_total, 2),
+            "count": uncategorised_count,
+        },
+    }
 
 
 @router.get("/account-balance-history")

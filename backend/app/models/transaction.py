@@ -17,6 +17,8 @@ class TransactionBase(BaseModel):
     booking_text: str = ""        # BuchText
     category: Optional[str] = None
     subcategory: Optional[str] = None
+    haupttyp: Optional[str] = None    # HausManager Hauptkategorie (Wasserkosten, Nebenkosten, …)
+    untertyp: Optional[str] = None    # HausManager Unterkategorie
     transaction_type: Optional[str] = None  # "hausgeld" | "ausgabe" | "rücklage" | "sonstiges"
     owner_unit: Optional[str] = None        # WE-001 etc. wenn erkannt
     seq_no: Optional[int] = None            # Lfd.Nr

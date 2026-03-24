@@ -13,6 +13,7 @@ from datetime import date, datetime
 from typing import Iterator
 
 from ..models.transaction import TransactionCreate
+from .expense_classifier import classify_expense
 
 # Known WE-unit patterns extracted from purpose text
 _WE_PATTERN = re.compile(r"\bWE[-\s]?(\d{3})\b", re.IGNORECASE)
@@ -130,6 +131,13 @@ def parse_starmoney_file(
         purpose = _build_purpose(row)
         tx_type, unit = _classify(row, purpose, owner_ibans)
 
+        # Auto-classify expense transactions into Haupttyp / Untertyp
+        auto_haupttyp, auto_untertyp = None, None
+        if tx_type == "ausgabe":
+            auto_haupttyp, auto_untertyp = classify_expense(
+                row.get("AgName1", ""), purpose
+            )
+
         try:
             booking_date = _parse_date(row.get("BuchDatum", ""))
             value_date = _parse_date(row.get("WertDatum", ""))
@@ -148,6 +156,10 @@ def parse_starmoney_file(
         counterparty_bic = row.get("AgBlz", "").strip()
         counterparty_name = row.get("AgName1", "").strip()
 
+        # Keep StarMoney's own category fields as-is; store our taxonomy separately.
+        tx_category = row.get("Kategorie", "").strip() or None
+        tx_subcategory = row.get("Unterkat", "").strip() or None
+
         yield TransactionCreate(
             account_id=account_id,
             account_number=account_number,
@@ -160,8 +172,10 @@ def parse_starmoney_file(
             counterparty_bic=counterparty_bic or None,
             purpose=purpose,
             booking_text=row.get("BuchText", "").strip(),
-            category=row.get("Kategorie", "").strip() or None,
-            subcategory=row.get("Unterkat", "").strip() or None,
+            category=tx_category,
+            subcategory=tx_subcategory,
+            haupttyp=auto_haupttyp,
+            untertyp=auto_untertyp,
             transaction_type=tx_type,
             owner_unit=unit,
             seq_no=seq_no,

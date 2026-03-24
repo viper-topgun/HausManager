@@ -1,0 +1,211 @@
+"""
+Automatic expense sub-categorization for outgoing transactions.
+
+Taxonomy:
+  Haupttyp (category)    →  Untertyp (subcategory)
+  ─────────────────────────────────────────────────
+  Wasserkosten           →  Frischwasserkosten
+                         →  Abwasserkosten
+  Nebenkosten            →  Gemeinschaftsstrom
+                         →  Müllentsorgung
+                         →  Grundsteuer
+                         →  Sach- und Haftpflichtversicherung
+                         →  Brennstoffeinkauf
+                         →  Miet- oder Wartungsgebühren
+  Heiznebenkosten        →  Kaminfeger/Schornsteinfeger
+                         →  Betriebsstrom
+                         →  Reinigungskosten
+                         →  Wartungskosten
+                         →  Mietgebühren
+                         →  Wartungsgebühren
+"""
+
+from typing import Optional
+
+# ---------------------------------------------------------------------------
+# Taxonomy: Haupttyp → list of valid Untertypen
+# ---------------------------------------------------------------------------
+
+EXPENSE_TAXONOMY: dict[str, list[str]] = {
+    "Wasserkosten": [
+        "Frischwasserkosten",
+        "Abwasserkosten",
+    ],
+    "Nebenkosten": [
+        "Gemeinschaftsstrom",
+        "Müllentsorgung",
+        "Grundsteuer",
+        "Sach- und Haftpflichtversicherung",
+        "Brennstoffeinkauf",
+        "Miet- oder Wartungsgebühren",
+    ],
+    "Heiznebenkosten": [
+        "Kaminfeger/Schornsteinfeger",
+        "Betriebsstrom",
+        "Reinigungskosten",
+        "Wartungskosten",
+        "Mietgebühren",
+        "Wartungsgebühren",
+    ],
+}
+
+
+# ---------------------------------------------------------------------------
+# Classification rules as plain functions (serializable / importable)
+# ---------------------------------------------------------------------------
+
+def _rule_frischwasser(n: str, p: str) -> bool:
+    return (
+        "weilachgruppe" in n
+        or "wasserversorgung" in n
+        or "zweckverband weil" in n
+        or "frischwasser" in p
+    )
+
+
+def _rule_abwasser(n: str, p: str) -> bool:
+    return (
+        "abwasser" in p
+        or "kanalbenütz" in p
+        or "abwassergeb" in p
+        or ("gemeinde" in n and ("kanal" in p or "abwasser" in p))
+    )
+
+
+def _rule_gemeinschaftsstrom(n: str, p: str) -> bool:
+    return "e.on" in n or "eon energie" in n or "e on energie" in n
+
+
+def _rule_muell(n: str, p: str) -> bool:
+    return (
+        "müll" in p
+        or "entsorgung" in p
+        or "abfallgebühr" in p
+        or "abfall" in p
+        or ("landkreis" in n and "müll" in p)
+    )
+
+
+def _rule_grundsteuer(n: str, p: str) -> bool:
+    return "finanzamt" in n or "grundsteuer" in p or "grundst." in p
+
+
+def _rule_versicherung(n: str, p: str) -> bool:
+    return (
+        "versicherung" in n
+        or "versicherungs" in n
+        or "haftpflicht" in p
+        or "vkb" in n
+        or "allianz" in n
+    )
+
+
+def _rule_brennstoff(n: str, p: str) -> bool:
+    return (
+        "heizöl" in p
+        or "brennstoff" in p
+        or "biomasse" in n
+        or ("wärme" in n and "verbund" in n)
+        or "brennstoff" in n
+    )
+
+
+def _rule_miet_wartung_wasser(n: str, p: str) -> bool:
+    return (
+        ("zähler" in p and ("miete" in p or "wartung" in p))
+        or "messdienstleistung" in p
+        or "mietgebühr" in p and "zähler" in p
+    )
+
+
+def _rule_kaminfeger(n: str, p: str) -> bool:
+    return (
+        "kaminfeger" in n
+        or "schornstein" in n
+        or "bezirksschornstein" in n
+        or ("kamin" in p and ("feger" in p or "kehrer" in p))
+    )
+
+
+def _rule_betriebsstrom(n: str, p: str) -> bool:
+    return "betriebsstrom" in p or ("strom" in p and "heiz" in p)
+
+
+def _rule_reinigungskosten(n: str, p: str) -> bool:
+    return "reinigung" in p and (
+        "heiz" in p or "anlage" in p or "kessel" in p or "brenner" in p
+    )
+
+
+def _rule_wartungskosten(n: str, p: str) -> bool:
+    return (
+        ("wartung" in p or "heizungswartung" in p)
+        and "zähler" not in p
+        and "mietgebühr" not in p
+    )
+
+
+def _rule_heiz_mietgebuehren(n: str, p: str) -> bool:
+    return ("miete" in p or "mietgebühr" in p) and (
+        "heiz" in p or "heizkessel" in p or "brenner" in p
+    )
+
+
+def _rule_heiz_wartungsgebuehren(n: str, p: str) -> bool:
+    return "wartungsgebühr" in p and ("heiz" in p or "brenner" in p)
+
+
+# ---------------------------------------------------------------------------
+# Ordered rules: (haupttyp, untertyp, rule_fn)
+# First matching rule wins.
+# ---------------------------------------------------------------------------
+
+_RULES: list[tuple[str, str, object]] = [
+    # ── Wasserkosten ──────────────────────────────────────────────────────────
+    ("Wasserkosten",   "Frischwasserkosten",              _rule_frischwasser),
+    ("Wasserkosten",   "Abwasserkosten",                  _rule_abwasser),
+    # ── Nebenkosten ───────────────────────────────────────────────────────────
+    ("Nebenkosten",    "Gemeinschaftsstrom",               _rule_gemeinschaftsstrom),
+    ("Nebenkosten",    "Müllentsorgung",                   _rule_muell),
+    ("Nebenkosten",    "Grundsteuer",                      _rule_grundsteuer),
+    ("Nebenkosten",    "Sach- und Haftpflichtversicherung", _rule_versicherung),
+    ("Nebenkosten",    "Brennstoffeinkauf",                _rule_brennstoff),
+    ("Nebenkosten",    "Miet- oder Wartungsgebühren",      _rule_miet_wartung_wasser),
+    # ── Heiznebenkosten ───────────────────────────────────────────────────────
+    ("Heiznebenkosten", "Kaminfeger/Schornsteinfeger",     _rule_kaminfeger),
+    ("Heiznebenkosten", "Betriebsstrom",                   _rule_betriebsstrom),
+    ("Heiznebenkosten", "Reinigungskosten",                _rule_reinigungskosten),
+    ("Heiznebenkosten", "Wartungskosten",                  _rule_wartungskosten),
+    ("Heiznebenkosten", "Mietgebühren",                    _rule_heiz_mietgebuehren),
+    ("Heiznebenkosten", "Wartungsgebühren",                _rule_heiz_wartungsgebuehren),
+]
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+def classify_expense(
+    counterparty_name: str,
+    purpose: str,
+) -> tuple[Optional[str], Optional[str]]:
+    """
+    Return (haupttyp, untertyp) for an expense transaction, or (None, None).
+    Only makes sense to call for ausgabe-type transactions (amount < 0).
+    """
+    n = (counterparty_name or "").lower().strip()
+    p = (purpose or "").lower().strip()
+
+    for haupttyp, untertyp, fn in _RULES:
+        try:
+            if fn(n, p):  # type: ignore[operator]
+                return haupttyp, untertyp
+        except Exception:
+            continue
+
+    return None, None
+
+
+def is_valid_kategorie(haupttyp: str, untertyp: str) -> bool:
+    """Check that the given (Haupttyp, Untertyp) combination is in the taxonomy."""
+    return untertyp in EXPENSE_TAXONOMY.get(haupttyp, [])

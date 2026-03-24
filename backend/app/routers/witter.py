@@ -274,8 +274,30 @@ async def prefill_witter(year: int):
     ).sort("unit_id", 1).to_list(None)
 
     # ── Build Nebenkosten + Wasserkosten from expense transactions ──
+    # Strategy: prefer stored haupttyp/untertyp fields (from expense_classifier);
+    # fall back to keyword rules for uncategorised transactions.
     nk_map: dict[str, dict] = {}  # kategorie → {betrag, lieferant, rechnungsdatum, nr, list_name}
     hk_map: dict[str, dict] = {}  # kategorie → {betrag, datum, nr}
+
+    # Untertyp → Witter-Formular Kategoriename mapping (stored subcategory → form label)
+    _UNTERTYP_TO_WITTER_NK: dict[str, tuple[str, str]] = {
+        "Gemeinschaftsstrom":             ("Gemeinschaftsstrom", "nebenkosten"),
+        "Müllentsorgung":                 ("Müllentsorgung", "nebenkosten"),
+        "Grundsteuer":                    ("Grundsteuer", "nebenkosten"),
+        "Sach- und Haftpflichtversicherung": ("Sach- und Haftpflichtversicherung", "nebenkosten"),
+        "Brennstoffeinkauf":              ("Brennstoffeinkauf", "nebenkosten"),
+        "Miet- oder Wartungsgebühren":    ("Miet-/Wartungsgebühren für Kaltwasserzähler", "wasserkosten"),
+        "Frischwasserkosten":             ("Frischwasserkosten", "wasserkosten"),
+        "Abwasserkosten":                 ("Abwassergebühren", "wasserkosten"),
+    }
+    _UNTERTYP_TO_WITTER_HK: dict[str, str] = {
+        "Kaminfeger/Schornsteinfeger":    "Kaminfeger/Schornsteinfeger",
+        "Betriebsstrom":                  "Betriebsstrom (nicht Warmstrom)",
+        "Reinigungskosten":               "Reinigungskosten der Heizungsanlage",
+        "Wartungskosten":                 "Wartungskosten (keine Reparaturkosten)",
+        "Mietgebühren":                   "Mietgebühren",
+        "Wartungsgebühren":               "Wartungsgebühren",
+    }
 
     for tx in expense_txs:
         name = (tx.get("counterparty_name") or "").lower().strip()
@@ -283,12 +305,19 @@ async def prefill_witter(year: int):
         amt = abs(tx["amount"])
         bd = tx["booking_date"] if isinstance(tx["booking_date"], str) else tx["booking_date"].isoformat()
 
+        # Prefer stored untertyp from expense_classifier
+        stored_cat = tx.get("haupttyp") or ""
+        stored_sub = tx.get("untertyp") or ""
+
         matched = False
-        for kategorie, list_name, fn in _NEBENKOSTEN_RULES:
-            if fn(name, purp):
-                if kategorie not in nk_map:
-                    nk_map[kategorie] = {
-                        "kategorie": kategorie,
+
+        # Try stored category first
+        if stored_sub:
+            if stored_sub in _UNTERTYP_TO_WITTER_NK:
+                witter_label, list_name = _UNTERTYP_TO_WITTER_NK[stored_sub]
+                if witter_label not in nk_map:
+                    nk_map[witter_label] = {
+                        "kategorie": witter_label,
                         "list_name": list_name,
                         "betrag_brutto": 0.0,
                         "lieferant": tx.get("counterparty_name"),
@@ -298,13 +327,45 @@ async def prefill_witter(year: int):
                         "_last_date": bd,
                         "_last_purpose": tx.get("purpose", ""),
                     }
-                row = nk_map[kategorie]
+                row = nk_map[witter_label]
                 row["betrag_brutto"] = round(row["betrag_brutto"] + amt, 2)
                 row["_count"] += 1
                 row["_last_date"] = bd
                 row["_last_purpose"] = tx.get("purpose", "")
                 matched = True
-                break
+            elif stored_sub in _UNTERTYP_TO_WITTER_HK:
+                witter_label = _UNTERTYP_TO_WITTER_HK[stored_sub]
+                if witter_label not in hk_map:
+                    hk_map[witter_label] = {"kategorie": witter_label, "betrag_brutto": 0.0, "datum": bd, "_count": 0}
+                row = hk_map[witter_label]
+                row["betrag_brutto"] = round(row["betrag_brutto"] + amt, 2)
+                row["datum"] = bd
+                row["_count"] += 1
+                matched = True
+
+        if not matched:
+            # Fallback to keyword rules
+            for kategorie, list_name, fn in _NEBENKOSTEN_RULES:
+                if fn(name, purp):
+                    if kategorie not in nk_map:
+                        nk_map[kategorie] = {
+                            "kategorie": kategorie,
+                            "list_name": list_name,
+                            "betrag_brutto": 0.0,
+                            "lieferant": tx.get("counterparty_name"),
+                            "rechnungsdatum": None,
+                            "nr": None,
+                            "_count": 0,
+                            "_last_date": bd,
+                            "_last_purpose": tx.get("purpose", ""),
+                        }
+                    row = nk_map[kategorie]
+                    row["betrag_brutto"] = round(row["betrag_brutto"] + amt, 2)
+                    row["_count"] += 1
+                    row["_last_date"] = bd
+                    row["_last_purpose"] = tx.get("purpose", "")
+                    matched = True
+                    break
 
         if not matched:
             for kategorie, fn in _HEIZNEBENKOSTEN_RULES:

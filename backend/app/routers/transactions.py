@@ -3,6 +3,7 @@ from bson import ObjectId
 from pydantic import BaseModel
 from typing import Optional
 from ..database import get_db
+from ..services.expense_classifier import EXPENSE_TAXONOMY, classify_expense, is_valid_kategorie
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
@@ -20,6 +21,8 @@ async def list_transactions(
     year: Optional[int] = None,
     month: Optional[int] = None,
     search: Optional[str] = None,
+    haupttyp: Optional[str] = None,
+    untertyp: Optional[str] = None,
     limit: int = Query(default=200, le=1000),
     skip: int = 0,
 ):
@@ -31,6 +34,10 @@ async def list_transactions(
         query["transaction_type"] = transaction_type
     if owner_unit:
         query["owner_unit"] = owner_unit
+    if haupttyp:
+        query["haupttyp"] = haupttyp
+    if untertyp:
+        query["untertyp"] = untertyp
     if search:
         import re
         pattern = re.compile(re.escape(search), re.IGNORECASE)
@@ -61,6 +68,17 @@ async def list_transactions(
     return {"total": total, "items": [_fix_id(d) for d in docs]}
 
 
+# ---------------------------------------------------------------------------
+# Expense taxonomy: used by frontend to build dropdowns
+# Static path – MUST be defined before the /{tx_id} wildcard route
+# ---------------------------------------------------------------------------
+
+@router.get("/taxonomy")
+async def get_taxonomy():
+    """Return the full Haupttyp → [Untertypen] taxonomy for expense categories."""
+    return EXPENSE_TAXONOMY
+
+
 @router.get("/{tx_id}")
 async def get_transaction(tx_id: str):
     db = get_db()
@@ -76,6 +94,72 @@ async def delete_transaction(tx_id: str):
     result = await db.transactions.delete_one({"_id": ObjectId(tx_id)})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Transaction not found")
+
+
+# ---------------------------------------------------------------------------
+# Kategorie-Zuweisung (manual override)
+# ---------------------------------------------------------------------------
+
+class KategorieUpdate(BaseModel):
+    haupttyp: Optional[str] = None   # Hauptkategorie  (None = zurücksetzen)
+    untertyp: Optional[str] = None   # Unterkategorie  (None = zurücksetzen)
+
+
+@router.patch("/{tx_id}/kategorie")
+async def set_kategorie(tx_id: str, data: KategorieUpdate):
+    """Manually assign or clear the Haupttyp/Untertyp for a transaction."""
+    if data.haupttyp and data.untertyp:
+        if not is_valid_kategorie(data.haupttyp, data.untertyp):
+            raise HTTPException(
+                status_code=422,
+                detail=f"'{data.untertyp}' ist kein gültiger Untertyp von '{data.haupttyp}'",
+            )
+    db = get_db()
+    update = {
+        "haupttyp": data.haupttyp,
+        "untertyp": data.untertyp,
+    }
+    result = await db.transactions.update_one(
+        {"_id": ObjectId(tx_id)}, {"$set": update}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    doc = await db.transactions.find_one({"_id": ObjectId(tx_id)})
+    return _fix_id(doc)
+
+
+# ---------------------------------------------------------------------------
+# Retroactive auto-classification of uncategorised ausgabe transactions
+# ---------------------------------------------------------------------------
+
+@router.post("/reclassify", status_code=200)
+async def reclassify_expenses():
+    """
+    Run the auto-classifier over ALL ausgabe transactions that currently have
+    no category set and update them in-place.
+    Returns the number of transactions that were updated.
+    """
+    db = get_db()
+    cursor = db.transactions.find({
+        "transaction_type": "ausgabe",
+        "haupttyp": None,
+        "is_fehlbuchung": {"$ne": True},
+    })
+
+    updated = 0
+    async for tx in cursor:
+        ht, ut = classify_expense(
+            tx.get("counterparty_name") or "",
+            tx.get("purpose") or "",
+        )
+        if ht:
+            await db.transactions.update_one(
+                {"_id": tx["_id"]},
+                {"$set": {"haupttyp": ht, "untertyp": ut}},
+            )
+            updated += 1
+
+    return {"updated": updated}
 
 
 class FehlbuchungUpdate(BaseModel):
